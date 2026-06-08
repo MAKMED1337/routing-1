@@ -5,13 +5,16 @@
 #include "graph/graph.hpp"
 #include "graph/reverse_graph.hpp"
 
+#include <functional>
 #include <string_view>
 
 namespace transport {
 
 class BidirectionalAStarAlgorithm final : public RoutingAlgorithm {
 public:
-    explicit BidirectionalAStarAlgorithm(const Graph &graph);
+    using Heuristic = std::function<Distance(VertexId, VertexId)>;
+
+    BidirectionalAStarAlgorithm(const Graph &graph, Heuristic forward_heuristic, Heuristic backward_heuristic);
 
     [[nodiscard]] std::string_view name() const override;
     void preprocess() override;
@@ -19,6 +22,8 @@ public:
 
 private:
     const Graph &graph_;
+    Heuristic forward_heuristic_;
+    Heuristic backward_heuristic_;
     Graph reverse_;
     mutable StampedVector<Distance> forward_dist_;
     mutable StampedVector<Distance> backward_dist_;

@@ -6,6 +6,7 @@
 #include "algorithms/ch/contraction_hierarchy.hpp"
 #include "algorithms/dijkstra.hpp"
 
+#include <cmath>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -23,7 +24,11 @@ std::unique_ptr<RoutingAlgorithm> make_routing_algorithm(const std::string &name
         return std::make_unique<BidirectionalDijkstraAlgorithm>(graph);
     }
     if (name == "bidi_astar") {
-        return std::make_unique<BidirectionalAStarAlgorithm>(graph);
+        auto haversine_heuristic = [&graph](VertexId from, VertexId to) -> Distance {
+            return static_cast<Distance>(std::floor(haversine_meters(graph.coords[from], graph.coords[to]) *
+                                                    static_cast<double>(kDistanceScale)));
+        };
+        return std::make_unique<BidirectionalAStarAlgorithm>(graph, haversine_heuristic, haversine_heuristic);
     }
     if (name == "ch") {
         return std::make_unique<ContractionHierarchyAlgorithm>(graph);

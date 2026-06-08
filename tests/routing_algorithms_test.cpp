@@ -96,7 +96,8 @@ bool check_all_pairs(const transport::Graph &graph, const transport::RoutingAlgo
 
 bool check_all_algorithms(const transport::Graph &graph) {
     transport::AStarAlgorithm astar(graph);
-    transport::BidirectionalAStarAlgorithm bidi_astar(graph);
+    auto zero_heuristic = [](transport::VertexId, transport::VertexId) -> transport::Distance { return 0; };
+    transport::BidirectionalAStarAlgorithm bidi_astar(graph, zero_heuristic, zero_heuristic);
     transport::BidirectionalDijkstraAlgorithm bidijkstra(graph);
     transport::ContractionHierarchyAlgorithm ch(graph);
     bidi_astar.preprocess();
