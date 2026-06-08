@@ -43,8 +43,10 @@ add_library(transport_core
   src/algorithms/ch/node_order.cpp
   src/algorithms/ch/witness_search.cpp
   src/algorithms/ch/work_graph.cpp
+  src/algorithms/bidirectional_dijkstra.cpp
   src/algorithms/dijkstra.cpp
   src/graph/graph.cpp
+  src/graph/reverse_graph.cpp
   src/algorithms/routing_algorithm_factory.cpp
 )
 target_compile_features(transport_core PUBLIC cxx_std_23)

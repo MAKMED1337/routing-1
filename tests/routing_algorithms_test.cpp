@@ -1,4 +1,5 @@
 #include "algorithms/astar.hpp"
+#include "algorithms/bidirectional_dijkstra.hpp"
 #include "algorithms/ch/contraction_hierarchy.hpp"
 #include "algorithms/dijkstra.hpp"
 #include "graph/graph.hpp"
@@ -79,16 +80,24 @@ bool check_malformed_graph_files_fail_fast() {
 bool check_all_pairs(const transport::Graph &graph) {
     const transport::DijkstraAlgorithm dijkstra(graph);
     const transport::AStarAlgorithm astar(graph);
+    transport::BidirectionalDijkstraAlgorithm bidijkstra(graph);
     transport::ContractionHierarchyAlgorithm ch(graph);
+    bidijkstra.preprocess();
     ch.preprocess();
     for (uint32_t s = 0; s < graph.vertex_count(); ++s) {
         for (uint32_t t = 0; t < graph.vertex_count(); ++t) {
             const transport::PathResult d = dijkstra.query(s, t);
             const transport::PathResult a = astar.query(s, t);
+            const transport::PathResult b = bidijkstra.query(s, t);
             const transport::PathResult c = ch.query(s, t);
             if (!same_distance(d.distance_units, a.distance_units)) {
                 std::cerr << "mismatch source=" << s << " target=" << t << " dijkstra=" << d.distance_units
                           << " astar=" << a.distance_units << "\n";
+                return false;
+            }
+            if (!same_distance(d.distance_units, b.distance_units)) {
+                std::cerr << "mismatch source=" << s << " target=" << t << " dijkstra=" << d.distance_units
+                          << " bidijkstra=" << b.distance_units << "\n";
                 return false;
             }
             if (!same_distance(d.distance_units, c.distance_units)) {
@@ -122,6 +131,18 @@ int main() {
                                                                      {{1, 1}},
                                                                  });
     if (!check_all_pairs(directed_with_witness)) {
+        return 1;
+    }
+
+    const transport::Graph asymmetric = make_graph(6, {
+                                                          {{1, 1}, {4, 20}},
+                                                          {{2, 1}},
+                                                          {{3, 1}},
+                                                          {{5, 1}},
+                                                          {{3, 1}},
+                                                          {{1, 50}},
+                                                      });
+    if (!check_all_pairs(asymmetric)) {
         return 1;
     }
 
