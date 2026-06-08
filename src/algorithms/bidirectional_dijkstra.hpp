@@ -19,7 +19,7 @@ public:
 
 private:
     const Graph &graph_;
-    ReverseGraph reverse_;
+    Graph reverse_;
     mutable StampedVector<Distance> forward_dist_;
     mutable StampedVector<Distance> backward_dist_;
 };

@@ -12,23 +12,6 @@
 #include <vector>
 
 namespace transport {
-namespace {
-
-Distance saturating_add(Distance lhs, Distance rhs) {
-    if (lhs == kUnreachable || rhs == kUnreachable) {
-        return kUnreachable;
-    }
-    if (kUnreachable - lhs < rhs) {
-        return kUnreachable;
-    }
-    return lhs + rhs;
-}
-
-void update_best(Distance candidate, Distance opposite, Distance &best) {
-    best = std::min(best, saturating_add(candidate, opposite));
-}
-
-} // namespace
 
 BidirectionalDijkstraAlgorithm::BidirectionalDijkstraAlgorithm(const Graph &graph)
     : graph_(graph), forward_dist_(graph.vertex_count(), kUnreachable),
@@ -57,55 +40,46 @@ PathResult BidirectionalDijkstraAlgorithm::query(VertexId source, VertexId targe
     Distance best = source == target ? 0 : kUnreachable;
     uint32_t settled = 0;
 
-    while (!forward_pq.empty() || !backward_pq.empty()) {
-        const Distance forward_min = forward_pq.empty() ? kUnreachable : forward_pq.top().key;
-        const Distance backward_min = backward_pq.empty() ? kUnreachable : backward_pq.top().key;
-        if (saturating_add(forward_min, backward_min) >= best) {
+    auto update_best = [&best](Distance candidate, Distance opposite) {
+        if (opposite < kUnreachable) {
+            best = std::min(best, candidate + opposite);
+        }
+    };
+
+    auto settle_next = [&settled,
+                        &update_best](std::priority_queue<HeapNode, std::vector<HeapNode>, std::greater<>> &pq,
+                                      const Graph &search_graph, StampedVector<Distance> &dist,
+                                      const StampedVector<Distance> &opposite_dist) {
+        const HeapNode top = pq.top();
+        pq.pop();
+        if (top.key != dist.get(top.v)) {
+            return;
+        }
+
+        ++settled;
+        update_best(top.key, opposite_dist.get(top.v));
+
+        for (const Edge &edge : search_graph.adjacent_edges(top.v)) {
+            const Distance next = top.key + edge.weight;
+            if (next < dist.get(edge.to)) {
+                dist.set(edge.to, next);
+                pq.push({next, edge.to});
+                update_best(next, opposite_dist.get(edge.to));
+            }
+        }
+    };
+
+    while (!forward_pq.empty() && !backward_pq.empty()) {
+        const Distance forward_min = forward_pq.top().key;
+        const Distance backward_min = backward_pq.top().key;
+        if (forward_min + backward_min >= best) {
             break;
         }
 
         if (forward_min <= backward_min) {
-            const HeapNode top = forward_pq.top();
-            forward_pq.pop();
-            if (top.key != forward_dist_.get(top.v)) {
-                continue;
-            }
-
-            ++settled;
-            update_best(top.key, backward_dist_.get(top.v), best);
-
-            const uint64_t begin = graph_.offsets[top.v];
-            const uint64_t end = graph_.offsets[static_cast<size_t>(top.v) + 1];
-            for (uint64_t i = begin; i < end; ++i) {
-                const Edge &edge = graph_.edges[static_cast<size_t>(i)];
-                const Distance next = top.key + edge.weight;
-                if (next < forward_dist_.get(edge.to)) {
-                    forward_dist_.set(edge.to, next);
-                    forward_pq.push({next, edge.to});
-                    update_best(next, backward_dist_.get(edge.to), best);
-                }
-            }
+            settle_next(forward_pq, graph_, forward_dist_, backward_dist_);
         } else {
-            const HeapNode top = backward_pq.top();
-            backward_pq.pop();
-            if (top.key != backward_dist_.get(top.v)) {
-                continue;
-            }
-
-            ++settled;
-            update_best(top.key, forward_dist_.get(top.v), best);
-
-            const uint64_t begin = reverse_.offsets[top.v];
-            const uint64_t end = reverse_.offsets[static_cast<size_t>(top.v) + 1];
-            for (uint64_t i = begin; i < end; ++i) {
-                const Edge &edge = reverse_.edges[static_cast<size_t>(i)];
-                const Distance next = top.key + edge.weight;
-                if (next < backward_dist_.get(edge.to)) {
-                    backward_dist_.set(edge.to, next);
-                    backward_pq.push({next, edge.to});
-                    update_best(next, forward_dist_.get(edge.to), best);
-                }
-            }
+            settle_next(backward_pq, reverse_, backward_dist_, forward_dist_);
         }
     }
 

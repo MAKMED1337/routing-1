@@ -77,37 +77,29 @@ bool check_malformed_graph_files_fail_fast() {
     return ok;
 }
 
-bool check_all_pairs(const transport::Graph &graph) {
+bool check_all_pairs(const transport::Graph &graph, const transport::RoutingAlgorithm &algorithm) {
     const transport::DijkstraAlgorithm dijkstra(graph);
-    const transport::AStarAlgorithm astar(graph);
-    transport::BidirectionalDijkstraAlgorithm bidijkstra(graph);
-    transport::ContractionHierarchyAlgorithm ch(graph);
-    bidijkstra.preprocess();
-    ch.preprocess();
     for (uint32_t s = 0; s < graph.vertex_count(); ++s) {
         for (uint32_t t = 0; t < graph.vertex_count(); ++t) {
             const transport::PathResult d = dijkstra.query(s, t);
-            const transport::PathResult a = astar.query(s, t);
-            const transport::PathResult b = bidijkstra.query(s, t);
-            const transport::PathResult c = ch.query(s, t);
-            if (!same_distance(d.distance_units, a.distance_units)) {
-                std::cerr << "mismatch source=" << s << " target=" << t << " dijkstra=" << d.distance_units
-                          << " astar=" << a.distance_units << "\n";
-                return false;
-            }
-            if (!same_distance(d.distance_units, b.distance_units)) {
-                std::cerr << "mismatch source=" << s << " target=" << t << " dijkstra=" << d.distance_units
-                          << " bidijkstra=" << b.distance_units << "\n";
-                return false;
-            }
-            if (!same_distance(d.distance_units, c.distance_units)) {
-                std::cerr << "mismatch source=" << s << " target=" << t << " dijkstra=" << d.distance_units
-                          << " ch=" << c.distance_units << "\n";
+            const transport::PathResult result = algorithm.query(s, t);
+            if (!same_distance(d.distance_units, result.distance_units)) {
+                std::cerr << "mismatch source=" << s << " target=" << t << " dijkstra=" << d.distance_units << " "
+                          << algorithm.name() << "=" << result.distance_units << "\n";
                 return false;
             }
         }
     }
     return true;
+}
+
+bool check_all_algorithms(const transport::Graph &graph) {
+    transport::AStarAlgorithm astar(graph);
+    transport::BidirectionalDijkstraAlgorithm bidijkstra(graph);
+    transport::ContractionHierarchyAlgorithm ch(graph);
+    bidijkstra.preprocess();
+    ch.preprocess();
+    return check_all_pairs(graph, astar) && check_all_pairs(graph, bidijkstra) && check_all_pairs(graph, ch);
 }
 
 } // namespace
@@ -119,7 +111,7 @@ int main() {
                                                     {{3, 1}},
                                                     {},
                                                 });
-    if (!check_all_pairs(line)) {
+    if (!check_all_algorithms(line)) {
         return 1;
     }
 
@@ -130,7 +122,7 @@ int main() {
                                                                      {{4, 2}},
                                                                      {{1, 1}},
                                                                  });
-    if (!check_all_pairs(directed_with_witness)) {
+    if (!check_all_algorithms(directed_with_witness)) {
         return 1;
     }
 
@@ -142,7 +134,7 @@ int main() {
                                                           {{3, 1}},
                                                           {{1, 50}},
                                                       });
-    if (!check_all_pairs(asymmetric)) {
+    if (!check_all_algorithms(asymmetric)) {
         return 1;
     }
 
@@ -153,7 +145,7 @@ int main() {
                                                             {{4, 1}},
                                                             {},
                                                         });
-    if (!check_all_pairs(disconnected)) {
+    if (!check_all_algorithms(disconnected)) {
         return 1;
     }
 

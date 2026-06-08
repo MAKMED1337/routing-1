@@ -5,10 +5,11 @@
 
 namespace transport {
 
-ReverseGraph build_reverse_graph(const Graph &graph) {
+Graph build_reverse_graph(const Graph &graph) {
     const VertexId vertices = graph.vertex_count();
 
-    ReverseGraph reverse;
+    Graph reverse;
+    reverse.coords = graph.coords;
     reverse.offsets.assign(static_cast<size_t>(vertices) + 1, 0);
     reverse.edges.resize(graph.edges.size());
 
@@ -21,10 +22,7 @@ ReverseGraph build_reverse_graph(const Graph &graph) {
 
     std::vector<uint64_t> next = reverse.offsets;
     for (VertexId from = 0; from < vertices; ++from) {
-        const uint64_t begin = graph.offsets[from];
-        const uint64_t end = graph.offsets[static_cast<size_t>(from) + 1];
-        for (uint64_t i = begin; i < end; ++i) {
-            const Edge &edge = graph.edges[static_cast<size_t>(i)];
+        for (const Edge &edge : graph.adjacent_edges(from)) {
             const uint64_t slot = next[edge.to]++;
             reverse.edges[static_cast<size_t>(slot)] = Edge{.to = from, .weight = edge.weight};
         }

@@ -68,6 +68,12 @@ uint32_t Graph::vertex_count() const { return static_cast<uint32_t>(coords.size(
 
 uint64_t Graph::edge_count() const { return static_cast<uint64_t>(edges.size()); }
 
+std::span<const Edge> Graph::adjacent_edges(VertexId vertex) const {
+    const uint64_t begin = offsets[vertex];
+    const uint64_t end = offsets[static_cast<size_t>(vertex) + 1];
+    return std::span<const Edge>(edges.data() + begin, end - begin);
+}
+
 bool save_graph_binary(const Graph &graph, const std::string &path) {
     std::ofstream out(path, std::ios::binary);
     if (!out) {

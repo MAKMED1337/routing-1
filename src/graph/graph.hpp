@@ -3,6 +3,7 @@
 #include "graph/types.hpp"
 
 #include <cstdint>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -28,6 +29,7 @@ public:
 
     [[nodiscard]] VertexId vertex_count() const;
     [[nodiscard]] uint64_t edge_count() const;
+    [[nodiscard]] std::span<const Edge> adjacent_edges(VertexId vertex) const;
 };
 
 [[nodiscard]] bool save_graph_binary(const Graph &graph, const std::string &path);
