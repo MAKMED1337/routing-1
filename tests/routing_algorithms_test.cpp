@@ -1,4 +1,5 @@
 #include "algorithms/astar.hpp"
+#include "algorithms/bidirectional_astar.hpp"
 #include "algorithms/bidirectional_dijkstra.hpp"
 #include "algorithms/ch/contraction_hierarchy.hpp"
 #include "algorithms/dijkstra.hpp"
@@ -95,11 +96,14 @@ bool check_all_pairs(const transport::Graph &graph, const transport::RoutingAlgo
 
 bool check_all_algorithms(const transport::Graph &graph) {
     transport::AStarAlgorithm astar(graph);
+    transport::BidirectionalAStarAlgorithm bidi_astar(graph);
     transport::BidirectionalDijkstraAlgorithm bidijkstra(graph);
     transport::ContractionHierarchyAlgorithm ch(graph);
+    bidi_astar.preprocess();
     bidijkstra.preprocess();
     ch.preprocess();
-    return check_all_pairs(graph, astar) && check_all_pairs(graph, bidijkstra) && check_all_pairs(graph, ch);
+    return check_all_pairs(graph, astar) && check_all_pairs(graph, bidi_astar) && check_all_pairs(graph, bidijkstra) &&
+           check_all_pairs(graph, ch);
 }
 
 } // namespace

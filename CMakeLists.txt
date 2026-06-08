@@ -43,6 +43,7 @@ add_library(transport_core
   src/algorithms/ch/node_order.cpp
   src/algorithms/ch/witness_search.cpp
   src/algorithms/ch/work_graph.cpp
+  src/algorithms/bidirectional_astar.cpp
   src/algorithms/bidirectional_dijkstra.cpp
   src/algorithms/dijkstra.cpp
   src/graph/graph.cpp
