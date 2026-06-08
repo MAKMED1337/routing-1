@@ -1,6 +1,7 @@
 #include "algorithms/routing_algorithm_factory.hpp"
 
 #include "algorithms/astar.hpp"
+#include "algorithms/bidirectional_dijkstra.hpp"
 #include "algorithms/ch/contraction_hierarchy.hpp"
 #include "algorithms/dijkstra.hpp"
 
@@ -16,6 +17,9 @@ std::unique_ptr<RoutingAlgorithm> make_routing_algorithm(const std::string &name
     }
     if (name == "astar") {
         return std::make_unique<AStarAlgorithm>(graph);
+    }
+    if (name == "bidijkstra") {
+        return std::make_unique<BidirectionalDijkstraAlgorithm>(graph);
     }
     if (name == "ch") {
         return std::make_unique<ContractionHierarchyAlgorithm>(graph);

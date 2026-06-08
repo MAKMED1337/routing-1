@@ -11,8 +11,8 @@
 
 int main(int argc, char **argv) {
     if (argc == 2 && std::string(argv[1]) == "--help") {
-        std::cout
-            << "usage: transport_query --graph <graph.bin> --source <id> --target <id> --algorithm dijkstra|astar|ch\n";
+        std::cout << "usage: transport_query --graph <graph.bin> --source <id> --target <id> --algorithm "
+                     "dijkstra|astar|bidijkstra|ch\n";
         return 0;
     }
 

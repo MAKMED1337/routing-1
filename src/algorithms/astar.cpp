@@ -44,10 +44,7 @@ PathResult AStarAlgorithm::query(VertexId source, VertexId target) const {
             break;
         }
 
-        const uint64_t begin = graph_.offsets[top.v];
-        const uint64_t end = graph_.offsets[top.v + 1];
-        for (uint64_t i = begin; i < end; ++i) {
-            const Edge &e = graph_.edges[static_cast<size_t>(i)];
+        for (const Edge &e : graph_.adjacent_edges(top.v)) {
             const Distance ng = g_.get(top.v) + e.weight;
             if (ng < g_.get(e.to)) {
                 g_.set(e.to, ng);
