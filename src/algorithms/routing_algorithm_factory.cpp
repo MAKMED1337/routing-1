@@ -28,7 +28,7 @@ std::unique_ptr<RoutingAlgorithm> make_routing_algorithm(const std::string &name
             return static_cast<Distance>(std::floor(haversine_meters(graph.coords[from], graph.coords[to]) *
                                                     static_cast<double>(kDistanceScale)));
         };
-        return std::make_unique<BidirectionalAStarAlgorithm>(graph, haversine_heuristic, haversine_heuristic);
+        return std::make_unique<BidirectionalAStarAlgorithm>(graph, haversine_heuristic);
     }
     if (name == "ch") {
         return std::make_unique<ContractionHierarchyAlgorithm>(graph);

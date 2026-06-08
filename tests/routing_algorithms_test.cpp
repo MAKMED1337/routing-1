@@ -97,7 +97,7 @@ bool check_all_pairs(const transport::Graph &graph, const transport::RoutingAlgo
 bool check_all_algorithms(const transport::Graph &graph) {
     transport::AStarAlgorithm astar(graph);
     auto zero_heuristic = [](transport::VertexId, transport::VertexId) -> transport::Distance { return 0; };
-    transport::BidirectionalAStarAlgorithm bidi_astar(graph, zero_heuristic, zero_heuristic);
+    transport::BidirectionalAStarAlgorithm bidi_astar(graph, zero_heuristic);
     transport::BidirectionalDijkstraAlgorithm bidijkstra(graph);
     transport::ContractionHierarchyAlgorithm ch(graph);
     bidi_astar.preprocess();
@@ -105,6 +105,31 @@ bool check_all_algorithms(const transport::Graph &graph) {
     ch.preprocess();
     return check_all_pairs(graph, astar) && check_all_pairs(graph, bidi_astar) && check_all_pairs(graph, bidijkstra) &&
            check_all_pairs(graph, ch);
+}
+
+bool check_bidi_astar_nonzero_heuristic(const transport::Graph &graph) {
+    uint32_t heuristic_calls = 0;
+    uint32_t nonzero_results = 0;
+    auto one_step_heuristic = [&heuristic_calls, &nonzero_results](transport::VertexId from,
+                                                                   transport::VertexId to) -> transport::Distance {
+        ++heuristic_calls;
+        if (from == to) {
+            return 0;
+        }
+        ++nonzero_results;
+        return 1;
+    };
+
+    transport::BidirectionalAStarAlgorithm bidi_astar(graph, one_step_heuristic);
+    bidi_astar.preprocess();
+    if (!check_all_pairs(graph, bidi_astar)) {
+        return false;
+    }
+    if (heuristic_calls == 0 || nonzero_results == 0) {
+        std::cerr << "expected bidirectional A* to use a non-zero heuristic\n";
+        return false;
+    }
+    return true;
 }
 
 } // namespace
@@ -117,6 +142,9 @@ int main() {
                                                     {},
                                                 });
     if (!check_all_algorithms(line)) {
+        return 1;
+    }
+    if (!check_bidi_astar_nonzero_heuristic(line)) {
         return 1;
     }
 

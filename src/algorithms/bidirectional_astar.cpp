@@ -11,10 +11,8 @@
 
 namespace transport {
 
-BidirectionalAStarAlgorithm::BidirectionalAStarAlgorithm(const Graph &graph, Heuristic forward_heuristic,
-                                                         Heuristic backward_heuristic)
-    : graph_(graph), forward_heuristic_(std::move(forward_heuristic)),
-      backward_heuristic_(std::move(backward_heuristic)), forward_dist_(graph.vertex_count(), kUnreachable),
+BidirectionalAStarAlgorithm::BidirectionalAStarAlgorithm(const Graph &graph, Heuristic heuristic)
+    : graph_(graph), heuristic_(std::move(heuristic)), forward_dist_(graph.vertex_count(), kUnreachable),
       backward_dist_(graph.vertex_count(), kUnreachable) {}
 
 std::string_view BidirectionalAStarAlgorithm::name() const { return "bidi_astar"; }
@@ -34,10 +32,10 @@ PathResult BidirectionalAStarAlgorithm::query(VertexId source, VertexId target) 
     backward_dist_.reset();
 
     auto forward_key = [this, target](VertexId vertex, Distance distance) -> Distance {
-        return distance + forward_heuristic_(vertex, target);
+        return distance + heuristic_(vertex, target);
     };
     auto backward_key = [this, source](VertexId vertex, Distance distance) -> Distance {
-        return distance + backward_heuristic_(source, vertex);
+        return distance + heuristic_(source, vertex);
     };
 
     std::priority_queue<HeapNode, std::vector<HeapNode>, std::greater<>> forward_pq;

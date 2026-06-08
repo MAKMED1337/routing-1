@@ -14,7 +14,7 @@ class BidirectionalAStarAlgorithm final : public RoutingAlgorithm {
 public:
     using Heuristic = std::function<Distance(VertexId, VertexId)>;
 
-    BidirectionalAStarAlgorithm(const Graph &graph, Heuristic forward_heuristic, Heuristic backward_heuristic);
+    BidirectionalAStarAlgorithm(const Graph &graph, Heuristic heuristic);
 
     [[nodiscard]] std::string_view name() const override;
     void preprocess() override;
@@ -22,8 +22,7 @@ public:
 
 private:
     const Graph &graph_;
-    Heuristic forward_heuristic_;
-    Heuristic backward_heuristic_;
+    Heuristic heuristic_;
     Graph reverse_;
     mutable StampedVector<Distance> forward_dist_;
     mutable StampedVector<Distance> backward_dist_;
