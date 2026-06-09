@@ -4,6 +4,7 @@
 #include "algorithms/bidirectional_astar.hpp"
 #include "algorithms/bidirectional_dijkstra.hpp"
 #include "algorithms/ch/contraction_hierarchy.hpp"
+#include "algorithms/chase/chase.hpp"
 #include "algorithms/phast.hpp"
 #include "graph/graph.hpp"
 #include "graph_fixtures.hpp"
@@ -91,9 +92,13 @@ bool check_all_algorithms(const transport::Graph &graph) {
     af2.preprocess();
     af16.preprocess();
 
+    // core_fraction=0.5 so even small graphs have a non-trivial core; Grid partition, 4 regions.
+    transport::ChaseAlgorithm chase(graph, 0.5f, 4, transport::PartitionMethod::Grid, 1);
+    chase.preprocess();
+
     return check_all_pairs(graph, astar) && check_all_pairs(graph, alt) && check_all_pairs(graph, bidi_astar) &&
            check_all_pairs(graph, bidijkstra) && check_all_pairs(graph, ch) && check_all_pairs(graph, af1) &&
-           check_all_pairs(graph, af2) && check_all_pairs(graph, af16);
+           check_all_pairs(graph, af2) && check_all_pairs(graph, af16) && check_all_pairs(graph, chase);
 }
 
 } // namespace

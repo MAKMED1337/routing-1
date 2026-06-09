@@ -6,6 +6,7 @@
 #include "algorithms/bidirectional_astar.hpp"
 #include "algorithms/bidirectional_dijkstra.hpp"
 #include "algorithms/ch/contraction_hierarchy.hpp"
+#include "algorithms/chase/chase.hpp"
 #include "algorithms/dijkstra.hpp"
 
 #include <cmath>
@@ -40,6 +41,9 @@ std::unique_ptr<RoutingAlgorithm> make_routing_algorithm(const std::string &name
     }
     if (name == "arcflags") {
         return std::make_unique<ArcFlagsAlgorithm>(graph);
+    }
+    if (name == "chase") {
+        return std::make_unique<ChaseAlgorithm>(graph);
     }
     throw std::invalid_argument("unsupported algorithm: " + name);
 }
