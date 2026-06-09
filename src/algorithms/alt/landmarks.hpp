@@ -11,9 +11,7 @@
 
 namespace transport::alt {
 
-constexpr Distance kLandmarkInf = kUnreachable;
-
-enum class LandmarkStrategy { Random, Farthest };
+enum class LandmarkStrategy { Random, Farthest, Planar };
 
 struct LandmarkSet {
     std::vector<VertexId> landmarks;
@@ -23,10 +21,6 @@ struct LandmarkSet {
     std::string strategy_name;
 };
 
-void one_to_all(const Graph &graph, VertexId source, std::vector<Distance> &out);
-
-LandmarkSet build_landmarks(const Graph &graph, const Graph &reverse, uint32_t landmark_count,
-                            LandmarkStrategy strategy, uint32_t seed);
 LandmarkSet build_landmarks(const Graph &graph, const Graph &reverse, uint32_t landmark_count,
                             LandmarkStrategy strategy, std::mt19937 &rng);
 
