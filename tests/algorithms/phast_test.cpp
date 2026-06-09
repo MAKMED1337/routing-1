@@ -123,6 +123,17 @@ bool check_phast_batch(const Graph &graph, const std::string &label) {
 
     bool ok = true;
 
+    // B=0: empty span — dist must be cleared, no UB.
+    {
+        const std::vector<VertexId> empty;
+        transport::phast_all_to_one_batch(ctx, empty, dist);
+        if (!dist.empty()) {
+            std::cerr << "phast_all_to_one_batch[" << label << "/B=0] expected empty dist, got size=" << dist.size()
+                      << "\n";
+            return false;
+        }
+    }
+
     // B=1: degenerate batch matches single-target.
     if (V > 0) {
         const std::vector<VertexId> t1 = {0};

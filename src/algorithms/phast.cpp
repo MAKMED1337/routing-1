@@ -152,6 +152,10 @@ void phast_one_to_all(const PhastContext &ctx, VertexId source, std::vector<Dist
 void phast_all_to_one_batch(const PhastContext &ctx, std::span<const VertexId> targets, std::vector<Distance> &dist) {
     const VertexId V = ctx.vertex_count();
     const size_t B = targets.size();
+    if (B == 0) {
+        dist.clear();
+        return;
+    }
 
     // dist_rank layout: rank-major, lane-minor — dist_rank[r * B + lane].
     std::vector<Distance> dist_rank(V * B, kUnreachable);
