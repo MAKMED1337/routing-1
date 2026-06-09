@@ -1,15 +1,14 @@
 #include "algorithms/shortest_paths.hpp"
 
-#include <algorithm>
+#include <stdexcept>
 
 namespace transport {
 
 void dijkstra_one_to_all(const Graph &graph, VertexId source, std::vector<Distance> &out) {
-    out.resize(graph.vertex_count());
     if (source >= graph.vertex_count()) {
-        std::fill(out.begin(), out.end(), kUnreachable);
-        return;
+        throw std::out_of_range("source vertex out of range");
     }
+    out.resize(graph.vertex_count());
     dijkstra_one_to_all([&graph](VertexId v) { return graph.adjacent_edges(v); }, source, out);
 }
 
