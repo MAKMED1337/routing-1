@@ -7,7 +7,6 @@
 #include "algorithms/bidirectional_dijkstra.hpp"
 #include "algorithms/ch/contraction_hierarchy.hpp"
 #include "algorithms/dijkstra.hpp"
-#include "algorithms/phast.hpp"
 
 #include <cmath>
 #include <memory>
@@ -40,9 +39,7 @@ std::unique_ptr<RoutingAlgorithm> make_routing_algorithm(const std::string &name
         return std::make_unique<ContractionHierarchyAlgorithm>(graph);
     }
     if (name == "arcflags") {
-        ContractionHierarchyAlgorithm ch_algo(graph);
-        ch_algo.preprocess();
-        return std::make_unique<ArcFlagsAlgorithm>(graph, PhastAlgorithm(ch_algo.get_ch()), 32, "inertial", 1);
+        return std::make_unique<ArcFlagsAlgorithm>(graph);
     }
     throw std::invalid_argument("unsupported algorithm: " + name);
 }
