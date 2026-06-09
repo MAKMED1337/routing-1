@@ -12,6 +12,9 @@
 
 namespace {
 
+using transport::test::check_all_pairs;
+using transport::test::make_graph;
+
 transport::Graph make_invalid_offsets_graph() {
     transport::Graph graph;
     graph.coords.resize(2);
@@ -70,53 +73,53 @@ bool check_all_algorithms(const transport::Graph &graph) {
     bidi_astar.preprocess();
     bidijkstra.preprocess();
     ch.preprocess();
-    return transport::test::check_all_pairs(graph, astar) && transport::test::check_all_pairs(graph, bidi_astar) &&
-           transport::test::check_all_pairs(graph, bidijkstra) && transport::test::check_all_pairs(graph, ch);
+    return check_all_pairs(graph, astar) && check_all_pairs(graph, bidi_astar) && check_all_pairs(graph, bidijkstra) &&
+           check_all_pairs(graph, ch);
 }
 
 } // namespace
 
 int main() {
-    const transport::Graph line = transport::test::make_graph(4, {
-                                                                     {{1, 1}},
-                                                                     {{2, 1}},
-                                                                     {{3, 1}},
-                                                                     {},
-                                                                 });
+    const transport::Graph line = make_graph(4, {
+                                                    {{1, 1}},
+                                                    {{2, 1}},
+                                                    {{3, 1}},
+                                                    {},
+                                                });
     if (!check_all_algorithms(line)) {
         return 1;
     }
 
-    const transport::Graph directed_with_witness = transport::test::make_graph(5, {
-                                                                                      {{1, 2}, {2, 10}},
-                                                                                      {{2, 2}, {3, 20}},
-                                                                                      {{3, 2}},
-                                                                                      {{4, 2}},
-                                                                                      {{1, 1}},
-                                                                                  });
+    const transport::Graph directed_with_witness = make_graph(5, {
+                                                                     {{1, 2}, {2, 10}},
+                                                                     {{2, 2}, {3, 20}},
+                                                                     {{3, 2}},
+                                                                     {{4, 2}},
+                                                                     {{1, 1}},
+                                                                 });
     if (!check_all_algorithms(directed_with_witness)) {
         return 1;
     }
 
-    const transport::Graph asymmetric = transport::test::make_graph(6, {
-                                                                           {{1, 1}, {4, 20}},
-                                                                           {{2, 1}},
-                                                                           {{3, 1}},
-                                                                           {{5, 1}},
-                                                                           {{3, 1}},
-                                                                           {{1, 50}},
-                                                                       });
+    const transport::Graph asymmetric = make_graph(6, {
+                                                          {{1, 1}, {4, 20}},
+                                                          {{2, 1}},
+                                                          {{3, 1}},
+                                                          {{5, 1}},
+                                                          {{3, 1}},
+                                                          {{1, 50}},
+                                                      });
     if (!check_all_algorithms(asymmetric)) {
         return 1;
     }
 
-    const transport::Graph disconnected = transport::test::make_graph(5, {
-                                                                             {{1, 5}},
-                                                                             {{2, 5}},
-                                                                             {},
-                                                                             {{4, 1}},
-                                                                             {},
-                                                                         });
+    const transport::Graph disconnected = make_graph(5, {
+                                                            {{1, 5}},
+                                                            {{2, 5}},
+                                                            {},
+                                                            {{4, 1}},
+                                                            {},
+                                                        });
     if (!check_all_algorithms(disconnected)) {
         return 1;
     }
