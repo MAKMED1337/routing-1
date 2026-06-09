@@ -1,10 +1,12 @@
 #include "algorithms/routing_algorithm_factory.hpp"
 
 #include "algorithms/astar.hpp"
+#include "algorithms/bidirectional_astar.hpp"
 #include "algorithms/bidirectional_dijkstra.hpp"
 #include "algorithms/ch/contraction_hierarchy.hpp"
 #include "algorithms/dijkstra.hpp"
 
+#include <cmath>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -15,11 +17,18 @@ std::unique_ptr<RoutingAlgorithm> make_routing_algorithm(const std::string &name
     if (name == "dijkstra") {
         return std::make_unique<DijkstraAlgorithm>(graph);
     }
+    auto haversine_heuristic = [&graph](VertexId from, VertexId to) -> Distance {
+        return static_cast<Distance>(
+            std::floor(haversine_meters(graph.coords[from], graph.coords[to]) * static_cast<double>(kDistanceScale)));
+    };
     if (name == "astar") {
-        return std::make_unique<AStarAlgorithm>(graph);
+        return std::make_unique<AStarAlgorithm>(graph, haversine_heuristic);
     }
     if (name == "bidijkstra") {
         return std::make_unique<BidirectionalDijkstraAlgorithm>(graph);
+    }
+    if (name == "bidi_astar") {
+        return std::make_unique<BidirectionalAStarAlgorithm>(graph, haversine_heuristic);
     }
     if (name == "ch") {
         return std::make_unique<ContractionHierarchyAlgorithm>(graph);

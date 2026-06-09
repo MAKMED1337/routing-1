@@ -43,6 +43,7 @@ add_library(transport_core
   src/algorithms/ch/node_order.cpp
   src/algorithms/ch/witness_search.cpp
   src/algorithms/ch/work_graph.cpp
+  src/algorithms/bidirectional_astar.cpp
   src/algorithms/bidirectional_dijkstra.cpp
   src/algorithms/dijkstra.cpp
   src/graph/graph.cpp
@@ -66,6 +67,8 @@ target_link_libraries(transport_benchmark PRIVATE transport_core project_warning
 if(BUILD_TESTING)
   add_executable(transport_routing_tests tests/routing_algorithms_test.cpp)
   target_link_libraries(transport_routing_tests PRIVATE transport_core project_warnings)
+  add_executable(astar_heuristics_tests tests/astar_heuristics_test.cpp)
+  target_link_libraries(astar_heuristics_tests PRIVATE transport_core project_warnings)
 endif()
 
 add_executable(write_benchmark_graph src/apps/write_benchmark_graph.cpp)
@@ -81,4 +84,5 @@ target_link_libraries(ch_measure PRIVATE bench_harness)
 if(BUILD_TESTING)
   add_test(NAME query_help COMMAND transport_query --help)
   add_test(NAME routing_algorithms COMMAND transport_routing_tests)
+  add_test(NAME astar_heuristics COMMAND astar_heuristics_tests)
 endif()

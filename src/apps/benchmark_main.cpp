@@ -117,8 +117,10 @@ int main(int argc, char **argv) {
     }
 
     if (graph_path.empty()) {
-        std::cerr << "usage: transport_benchmark --graph <graph.bin> [--algorithm-a dijkstra|astar|bidijkstra|ch] "
-                     "[--algorithm-b dijkstra|astar|bidijkstra|ch] [--queries N] [--min-settled A] [--max-settled B] "
+        std::cerr << "usage: transport_benchmark --graph <graph.bin> "
+                     "[--algorithm-a dijkstra|astar|bidijkstra|bidi_astar|ch] "
+                     "[--algorithm-b dijkstra|astar|bidijkstra|bidi_astar|ch] [--queries N] [--min-settled A] "
+                     "[--max-settled B] "
                      "[--seed S] [--out file]\n";
         return 1;
     }
