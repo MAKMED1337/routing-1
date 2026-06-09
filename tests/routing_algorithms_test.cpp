@@ -3,6 +3,7 @@
 #include "algorithms/bidirectional_astar.hpp"
 #include "algorithms/bidirectional_dijkstra.hpp"
 #include "algorithms/ch/contraction_hierarchy.hpp"
+#include "algorithms/partition.hpp"
 #include "graph/graph.hpp"
 #include "routing_test_utils.hpp"
 
@@ -64,6 +65,74 @@ bool check_malformed_graph_files_fail_fast() {
     std::filesystem::remove(invalid_offsets);
     std::filesystem::remove(invalid_edge);
     return ok;
+}
+
+transport::Graph make_coord_graph() {
+    transport::Graph graph;
+    // 4 vertices spread over a small lat/lon box
+    graph.coords = {
+        {.lat = 10.0, .lon = 20.0},
+        {.lat = 10.0, .lon = 21.0},
+        {.lat = 11.0, .lon = 20.0},
+        {.lat = 11.0, .lon = 21.0},
+    };
+    graph.offsets = {0, 0, 0, 0, 0};
+    return graph;
+}
+
+bool check_partition() {
+    const transport::Graph coord_graph = make_coord_graph();
+    const transport::VertexId V = coord_graph.vertex_count();
+
+    for (const transport::Graph *g : {&coord_graph}) {
+        for (uint32_t regions : {1u, 4u, 9u}) {
+            const auto result = transport::build_partition(*g, regions, transport::PartitionMethod::Grid);
+            if (result.size() != V) {
+                std::cerr << "partition: wrong result size\n";
+                return false;
+            }
+            for (uint16_t r : result) {
+                if (r >= regions) {
+                    std::cerr << "partition: region id out of range\n";
+                    return false;
+                }
+            }
+        }
+        for (uint32_t regions : {1u, 2u, 4u}) {
+            const auto result = transport::build_partition(*g, regions, transport::PartitionMethod::Inertial);
+            if (result.size() != V) {
+                std::cerr << "partition: inertial wrong result size\n";
+                return false;
+            }
+            for (uint16_t r : result) {
+                if (r >= regions) {
+                    std::cerr << "partition: inertial region id out of range\n";
+                    return false;
+                }
+            }
+        }
+    }
+
+    // Inertial must throw on non-power-of-2
+    bool threw = false;
+    try {
+        (void)transport::build_partition(coord_graph, 3, transport::PartitionMethod::Inertial);
+    } catch (const std::invalid_argument &) {
+        threw = true;
+    }
+    if (!threw) {
+        std::cerr << "partition: inertial did not throw for non-power-of-2 regions\n";
+        return false;
+    }
+
+    // String dispatch
+    const auto by_name = transport::build_partition(coord_graph, 4, "grid");
+    if (by_name.size() != V) {
+        std::cerr << "partition: string dispatch wrong size\n";
+        return false;
+    }
+
+    return true;
 }
 
 bool check_all_algorithms(const transport::Graph &graph) {
@@ -129,6 +198,10 @@ int main() {
     }
 
     if (!check_malformed_graph_files_fail_fast()) {
+        return 1;
+    }
+
+    if (!check_partition()) {
         return 1;
     }
 
