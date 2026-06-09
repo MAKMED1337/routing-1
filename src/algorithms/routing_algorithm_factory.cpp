@@ -1,6 +1,7 @@
 #include "algorithms/routing_algorithm_factory.hpp"
 
 #include "algorithms/alt/alt.hpp"
+#include "algorithms/arcflags/arc_flags.hpp"
 #include "algorithms/astar.hpp"
 #include "algorithms/bidirectional_astar.hpp"
 #include "algorithms/bidirectional_dijkstra.hpp"
@@ -36,6 +37,9 @@ std::unique_ptr<RoutingAlgorithm> make_routing_algorithm(const std::string &name
     }
     if (name == "ch") {
         return std::make_unique<ContractionHierarchyAlgorithm>(graph);
+    }
+    if (name == "arcflags") {
+        return std::make_unique<ArcFlagsAlgorithm>(graph, 32, "inertial", 1);
     }
     throw std::invalid_argument("unsupported algorithm: " + name);
 }

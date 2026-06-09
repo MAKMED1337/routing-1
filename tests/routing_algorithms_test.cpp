@@ -1,4 +1,5 @@
 #include "algorithms/alt/alt.hpp"
+#include "algorithms/arcflags/arc_flags.hpp"
 #include "algorithms/astar.hpp"
 #include "algorithms/bidirectional_astar.hpp"
 #include "algorithms/bidirectional_dijkstra.hpp"
@@ -81,6 +82,12 @@ bool check_all_algorithms(const transport::Graph &graph) {
            check_all_pairs(graph, bidijkstra) && check_all_pairs(graph, ch);
 }
 
+bool check_arcflags(const transport::Graph &graph) {
+    transport::ArcFlagsAlgorithm af(graph, 4, "grid", 1);
+    af.preprocess();
+    return check_all_pairs(graph, af);
+}
+
 } // namespace
 
 int main() {
@@ -89,6 +96,11 @@ int main() {
     ok &= check_all_algorithms(transport::test::make_witness_graph());
     ok &= check_all_algorithms(transport::test::make_asymmetric_graph());
     ok &= check_all_algorithms(transport::test::make_disconnected_graph());
+    ok &= check_arcflags(transport::test::make_line_graph());
+    ok &= check_arcflags(transport::test::make_witness_graph());
+    ok &= check_arcflags(transport::test::make_asymmetric_graph());
+    ok &= check_arcflags(transport::test::make_disconnected_graph());
+    ok &= check_arcflags(transport::test::make_grid_graph(4, 4));
     ok &= check_malformed_graph_files_fail_fast();
     if (!ok) {
         std::cerr << "routing algorithm tests FAILED\n";
