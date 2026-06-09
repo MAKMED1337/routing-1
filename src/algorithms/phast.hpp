@@ -11,7 +11,7 @@ namespace transport {
 // Rank-ordered cache layout for PHAST queries.
 // Stores rank-indexed upward CSRs with edge targets as ranks instead of original vertex ids,
 // enabling cache-friendly sweeps without per-query translation.
-struct PhastContext {
+struct PhastAlgorithm {
     std::vector<VertexId> rank_to_vertex; // rank  → original vertex
     std::vector<VertexId> vertex_to_rank; // vertex → rank
 
@@ -21,7 +21,7 @@ struct PhastContext {
     std::vector<size_t> bwd_offsets;
     std::vector<Edge> bwd_edges;
 
-    explicit PhastContext(const ContractionHierarchy &ch);
+    explicit PhastAlgorithm(const ContractionHierarchy &ch);
 
     [[nodiscard]] VertexId vertex_count() const;
     [[nodiscard]] std::span<const Edge> fwd_adjacent_edges(VertexId rank) const;

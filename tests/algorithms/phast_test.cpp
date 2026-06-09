@@ -14,14 +14,14 @@ using transport::ContractionHierarchyAlgorithm;
 using transport::DijkstraAlgorithm;
 using transport::Distance;
 using transport::Graph;
-using transport::PhastContext;
+using transport::PhastAlgorithm;
 using transport::VertexId;
 
-// Check PhastContext single-target APIs against Dijkstra.
+// Check PhastAlgorithm single-target APIs against Dijkstra.
 bool check_phast_context(const Graph &graph, const std::string &label) {
     ContractionHierarchyAlgorithm ch_algo(graph);
     ch_algo.preprocess();
-    const PhastContext ctx(ch_algo.get_ch());
+    const PhastAlgorithm ctx(ch_algo.get_ch());
 
     const DijkstraAlgorithm dijkstra(graph);
     const VertexId V = graph.vertex_count();
@@ -58,7 +58,7 @@ bool check_phast_context(const Graph &graph, const std::string &label) {
 bool check_phast_batch(const Graph &graph, const std::string &label) {
     ContractionHierarchyAlgorithm ch_algo(graph);
     ch_algo.preprocess();
-    const PhastContext ctx(ch_algo.get_ch());
+    const PhastAlgorithm ctx(ch_algo.get_ch());
 
     const DijkstraAlgorithm dijkstra(graph);
     const VertexId V = graph.vertex_count();
