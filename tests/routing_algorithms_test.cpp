@@ -80,14 +80,17 @@ bool check_all_algorithms(const transport::Graph &graph) {
     bidijkstra.preprocess();
     ch.preprocess();
 
+    // threads=1, threads=2, and threads=16 (more threads than work blocks on small graphs).
     transport::ArcFlagsAlgorithm af1(graph, transport::PhastAlgorithm(ch.get_ch()), 4, "grid", 1);
     transport::ArcFlagsAlgorithm af2(graph, transport::PhastAlgorithm(ch.get_ch()), 4, "grid", 2);
+    transport::ArcFlagsAlgorithm af16(graph, transport::PhastAlgorithm(ch.get_ch()), 4, "grid", 16);
     af1.preprocess();
     af2.preprocess();
+    af16.preprocess();
 
     return check_all_pairs(graph, astar) && check_all_pairs(graph, alt) && check_all_pairs(graph, bidi_astar) &&
            check_all_pairs(graph, bidijkstra) && check_all_pairs(graph, ch) && check_all_pairs(graph, af1) &&
-           check_all_pairs(graph, af2);
+           check_all_pairs(graph, af2) && check_all_pairs(graph, af16);
 }
 
 } // namespace

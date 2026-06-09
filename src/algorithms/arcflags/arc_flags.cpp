@@ -26,11 +26,10 @@ namespace {
 constexpr size_t kBatchSize = 8;
 } // namespace
 
-ArcFlagsAlgorithm::ArcFlagsAlgorithm(const Graph &graph, PhastAlgorithm phast, uint32_t regions,
+ArcFlagsAlgorithm::ArcFlagsAlgorithm(const Graph &graph, const PhastAlgorithm &phast, uint16_t regions,
                                      std::string partition_method, uint32_t threads)
-    : graph_(graph), phast_(std::move(phast)), regions_(regions),
-      partition_method_(parse_partition_method(partition_method)), threads_(threads),
-      dist_(graph.vertex_count(), kUnreachable) {
+    : graph_(graph), phast_(phast), regions_(regions), partition_method_(parse_partition_method(partition_method)),
+      threads_(threads), dist_(graph.vertex_count(), kUnreachable) {
     if (regions == 0 || regions > 64) {
         throw std::invalid_argument("arcflags: regions must be in [1, 64]");
     }
@@ -52,7 +51,7 @@ void ArcFlagsAlgorithm::preprocess() {
     const VertexId V = graph_.vertex_count();
     const size_t E = graph_.edges.size();
 
-    region_of_ = build_partition(graph_, static_cast<uint16_t>(regions_), partition_method_);
+    region_of_ = build_partition(graph_, regions_, partition_method_);
 
     // v is a boundary vertex of its region if any in-neighbor is from a different region.
     std::vector<bool> is_boundary(V, false);

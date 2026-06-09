@@ -14,14 +14,15 @@
 namespace transport {
 
 // Arc-flags shortest-path algorithm.
-// Caller builds a PhastAlgorithm from a preprocessed ContractionHierarchy and passes it
-// at construction time. preprocess() then partitions vertices into regions and computes per-edge
-// uint64_t bitmasks via PHAST all-to-one batch sweeps (equality rule) plus an own-region pass.
+// graph is the original road graph used for boundary detection, flag computation, and querying.
+// phast is built from a preprocessed ContractionHierarchy and used for all-to-one batch sweeps.
+// preprocess() partitions vertices into regions and computes per-edge uint64_t bitmasks via
+// PHAST sweeps (equality rule) plus an own-region pass.
 // At query time, standard Dijkstra skips edges whose bitmask does not include the target's bit.
 // Supports up to 64 regions. Multi-threaded flag computation via threads parameter (>= 1).
 class ArcFlagsAlgorithm final : public RoutingAlgorithm {
 public:
-    explicit ArcFlagsAlgorithm(const Graph &graph, PhastAlgorithm phast, uint32_t regions = 32,
+    explicit ArcFlagsAlgorithm(const Graph &graph, const PhastAlgorithm &phast, uint16_t regions = 32,
                                std::string partition_method = "inertial", uint32_t threads = 1);
 
     std::string_view name() const override;
@@ -31,7 +32,7 @@ public:
 private:
     const Graph &graph_;
     PhastAlgorithm phast_;
-    uint32_t regions_;
+    uint16_t regions_;
     PartitionMethod partition_method_;
     uint32_t threads_;
     bool preprocessed_ = false;
