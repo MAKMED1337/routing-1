@@ -81,7 +81,12 @@ bool save_graph_binary(const Graph &graph, const std::string &path) {
     }
 
     write_one(out, kMagicIntWeights);
-    const uint32_t vertices = static_cast<uint32_t>(graph.vertex_count());
+    // TRG2 stores the vertex count as a fixed-width header field.
+    const VertexId vertex_count = graph.vertex_count();
+    if (vertex_count > std::numeric_limits<uint32_t>::max()) {
+        throw std::runtime_error("graph has too many vertices for TRG2 binary format");
+    }
+    const uint32_t vertices = static_cast<uint32_t>(vertex_count);
     const uint64_t edges = graph.edge_count();
     write_one(out, vertices);
     write_one(out, edges);

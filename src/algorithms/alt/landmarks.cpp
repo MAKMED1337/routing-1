@@ -9,7 +9,6 @@
 #include <numbers>
 #include <queue>
 #include <random>
-#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -119,20 +118,13 @@ std::vector<VertexId> select_planar(const Graph &graph, uint32_t landmark_count)
 
     double sum_lat = 0.0;
     double sum_lon = 0.0;
-    size_t coord_count = 0;
     for (const NodeCoord &coord : graph.coords) {
-        if (coord.lat != 0.0 || coord.lon != 0.0) {
-            sum_lat += coord.lat;
-            sum_lon += coord.lon;
-            ++coord_count;
-        }
-    }
-    if (coord_count == 0) {
-        throw std::invalid_argument("planar ALT landmark strategy requires coordinates");
+        sum_lat += coord.lat;
+        sum_lon += coord.lon;
     }
 
-    const double center_lat = sum_lat / static_cast<double>(coord_count);
-    const double center_lon = sum_lon / static_cast<double>(coord_count);
+    const double center_lat = sum_lat / static_cast<double>(vertices);
+    const double center_lon = sum_lon / static_cast<double>(vertices);
 
     std::vector<std::pair<double, VertexId>> best_by_sector(landmark_count, {-1.0, 0});
     constexpr double kTwoPi = 2.0 * std::numbers::pi;

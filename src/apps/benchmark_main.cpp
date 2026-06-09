@@ -17,11 +17,16 @@
 #include <string_view>
 
 namespace fs = std::filesystem;
+using transport::ContractionHierarchyAlgorithm;
+using transport::Graph;
+using transport::PathResult;
+using transport::RoutingAlgorithm;
+using transport::VertexId;
 
 namespace {
 
 struct TimedResult {
-    transport::PathResult path;
+    PathResult path;
     uint64_t query_us = 0;
 };
 
@@ -30,17 +35,16 @@ struct TimedAlgorithmResult {
     const TimedResult &timed;
 };
 
-uint64_t preprocess_timed(transport::RoutingAlgorithm &algorithm) {
+uint64_t preprocess_timed(RoutingAlgorithm &algorithm) {
     const auto t0 = std::chrono::steady_clock::now();
     algorithm.preprocess();
     const auto t1 = std::chrono::steady_clock::now();
     return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count());
 }
 
-TimedResult query_timed(const transport::RoutingAlgorithm &algorithm, transport::VertexId source,
-                        transport::VertexId target) {
+TimedResult query_timed(const RoutingAlgorithm &algorithm, VertexId source, VertexId target) {
     const auto t0 = std::chrono::steady_clock::now();
-    const transport::PathResult result = algorithm.query(source, target);
+    const PathResult result = algorithm.query(source, target);
     const auto t1 = std::chrono::steady_clock::now();
     return TimedResult{result,
                        static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count())};
@@ -48,15 +52,14 @@ TimedResult query_timed(const transport::RoutingAlgorithm &algorithm, transport:
 
 bool same_distance(uint64_t a, uint64_t b) { return a == b; }
 
-void print_preprocessing_metrics(std::string_view prefix, const transport::RoutingAlgorithm &algorithm,
-                                 uint64_t preprocess_us) {
+void print_preprocessing_metrics(std::string_view prefix, const RoutingAlgorithm &algorithm, uint64_t preprocess_us) {
     std::cout << prefix << "_preprocess_us=" << preprocess_us << "\n";
-    if (const auto *ch = dynamic_cast<const transport::ContractionHierarchyAlgorithm *>(&algorithm)) {
+    if (const auto *ch = dynamic_cast<const ContractionHierarchyAlgorithm *>(&algorithm)) {
         std::cout << prefix << "_auxiliary_edges=" << ch->auxiliary_edge_count() << "\n";
     }
 }
 
-void write_benchmark_row(std::ofstream &out, uint32_t query, transport::VertexId source, transport::VertexId target,
+void write_benchmark_row(std::ofstream &out, uint32_t query, VertexId source, VertexId target,
                          const std::array<TimedAlgorithmResult, 2> &results) {
     out << query << "," << source << "," << target;
     for (const TimedAlgorithmResult &result : results) {
@@ -126,9 +129,9 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    const transport::Graph graph = transport::load_graph_binary(graph_path);
-    std::unique_ptr<transport::RoutingAlgorithm> runner_a;
-    std::unique_ptr<transport::RoutingAlgorithm> runner_b;
+    const Graph graph = transport::load_graph_binary(graph_path);
+    std::unique_ptr<RoutingAlgorithm> runner_a;
+    std::unique_ptr<RoutingAlgorithm> runner_b;
     try {
         runner_a = transport::make_routing_algorithm(algorithm_a, graph);
         runner_b = transport::make_routing_algorithm(algorithm_b, graph);
@@ -143,7 +146,7 @@ int main(int argc, char **argv) {
     print_preprocessing_metrics(runner_b->name(), *runner_b, algorithm_b_preprocess_us);
 
     std::mt19937 rng(seed);
-    std::uniform_int_distribution<transport::VertexId> pick(0, graph.vertex_count() - 1);
+    std::uniform_int_distribution<VertexId> pick(0, graph.vertex_count() - 1);
 
     fs::create_directories(fs::path(out_path).parent_path());
     std::ofstream out(out_path);
@@ -159,8 +162,8 @@ int main(int argc, char **argv) {
     uint32_t attempts = 0;
     while (accepted < queries && attempts < queries * 100) {
         ++attempts;
-        const transport::VertexId source = pick(rng);
-        const transport::VertexId target = pick(rng);
+        const VertexId source = pick(rng);
+        const VertexId target = pick(rng);
         if (source == target) {
             continue;
         }

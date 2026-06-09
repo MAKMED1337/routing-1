@@ -23,6 +23,9 @@
 namespace bench {
 
 using Json = nlohmann::ordered_json;
+using transport::Graph;
+using transport::RoutingAlgorithm;
+using transport::VertexId;
 
 struct BenchmarkArgs {
     std::string graph_path;
@@ -33,7 +36,7 @@ struct BenchmarkArgs {
 
 // Graph together with its load timing and post-load RSS, ready to hand to a RoutingAlgorithm constructor.
 struct LoadedGraph {
-    transport::Graph graph;
+    Graph graph;
     std::chrono::nanoseconds wall_ns{};
     std::chrono::nanoseconds cpu_ns{};
     uint64_t peak_rss_mb = 0;
@@ -88,7 +91,7 @@ inline uint64_t percentile_ns(const std::vector<uint64_t> &sorted_ns, double pct
 
 inline LoadedGraph load_graph(const BenchmarkArgs &args) {
     const Stopwatch sw;
-    transport::Graph graph = transport::load_graph_binary(args.graph_path);
+    Graph graph = transport::load_graph_binary(args.graph_path);
     const std::chrono::nanoseconds wall_ns = sw.wall_elapsed();
     const std::chrono::nanoseconds cpu_ns = sw.cpu_elapsed();
     return LoadedGraph{std::move(graph), wall_ns, cpu_ns, peak_rss_mb()};
@@ -99,8 +102,8 @@ inline LoadedGraph load_graph(const BenchmarkArgs &args) {
 // overlapping the standard fields; its entries are merged before the "queries" block. Use it
 // for algorithm-specific metadata (e.g. witness calls, auxiliary edge counts) that are only
 // available post-preprocess. Pass {} to omit algorithm-specific fields.
-inline void run_benchmark(const BenchmarkArgs &args, const LoadedGraph &loaded, std::string_view variant, transport::RoutingAlgorithm &algo,
-                          std::function<Json()> extra_fields = {}, std::ostream &out = std::cout) {
+inline void run_benchmark(const BenchmarkArgs &args, const LoadedGraph &loaded, std::string_view variant, RoutingAlgorithm &algo, std::function<Json()> extra_fields = {},
+                          std::ostream &out = std::cout) {
     const Stopwatch pp_sw;
     algo.preprocess();
     const std::chrono::nanoseconds pp_wall_ns = pp_sw.wall_elapsed();
@@ -108,13 +111,13 @@ inline void run_benchmark(const BenchmarkArgs &args, const LoadedGraph &loaded, 
     const uint64_t after_preprocess_rss = peak_rss_mb();
 
     std::mt19937 rng(args.seed);
-    std::uniform_int_distribution<transport::VertexId> pick(0, loaded.graph.vertex_count() - 1);
+    std::uniform_int_distribution<VertexId> pick(0, loaded.graph.vertex_count() - 1);
 
     std::vector<uint64_t> times;
     times.reserve(args.query_count);
     for (uint32_t i = 0; i < args.query_count; ++i) {
-        const transport::VertexId src = pick(rng);
-        const transport::VertexId dst = pick(rng);
+        const VertexId src = pick(rng);
+        const VertexId dst = pick(rng);
         const Stopwatch t;
         (void)algo.query(src, dst);
         times.push_back(static_cast<uint64_t>(t.wall_elapsed().count()));
