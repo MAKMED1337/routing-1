@@ -3,6 +3,7 @@
 #include <array>
 #include <bit>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <fstream>
 #include <limits>
@@ -15,6 +16,24 @@ namespace transport {
 namespace {
 
 constexpr uint32_t kMagicIntWeights = 0x54524732U; // TRG2
+
+uint64_t stored_offset(size_t offset) {
+    if constexpr (std::numeric_limits<size_t>::max() > std::numeric_limits<uint64_t>::max()) {
+        if (offset > std::numeric_limits<uint64_t>::max()) {
+            throw std::runtime_error("graph offset is too large for TRG2 binary format");
+        }
+    }
+    return static_cast<uint64_t>(offset);
+}
+
+size_t memory_offset(uint64_t offset) {
+    if constexpr (std::numeric_limits<uint64_t>::max() > std::numeric_limits<size_t>::max()) {
+        if (offset > std::numeric_limits<size_t>::max()) {
+            throw std::runtime_error("corrupted graph file: offset exceeds addressable size");
+        }
+    }
+    return static_cast<size_t>(offset);
+}
 
 template <typename T> void write_one(std::ofstream &out, const T &value) {
     static_assert(std::is_trivially_copyable_v<T>);
@@ -40,17 +59,17 @@ void validate_graph(const Graph &graph, uint64_t expected_edges) {
         throw std::runtime_error("corrupted graph file: first offset must be zero");
     }
 
-    uint64_t previous = 0;
-    for (const uint64_t offset : graph.offsets) {
+    size_t previous = 0;
+    for (const size_t offset : graph.offsets) {
         if (offset < previous) {
             throw std::runtime_error("corrupted graph file: offsets must be monotonic");
         }
-        if (offset > expected_edges) {
+        if (stored_offset(offset) > expected_edges) {
             throw std::runtime_error("corrupted graph file: offset exceeds edge count");
         }
         previous = offset;
     }
-    if (!graph.offsets.empty() && graph.offsets.back() != expected_edges) {
+    if (!graph.offsets.empty() && stored_offset(graph.offsets.back()) != expected_edges) {
         throw std::runtime_error("corrupted graph file: final offset must match edge count");
     }
 
@@ -69,8 +88,8 @@ VertexId Graph::vertex_count() const { return coords.size(); }
 uint64_t Graph::edge_count() const { return static_cast<uint64_t>(edges.size()); }
 
 std::span<const Edge> Graph::adjacent_edges(VertexId vertex) const {
-    const uint64_t begin = offsets[vertex];
-    const uint64_t end = offsets[static_cast<size_t>(vertex) + 1];
+    const size_t begin = offsets[vertex];
+    const size_t end = offsets[static_cast<size_t>(vertex) + 1];
     return std::span<const Edge>(edges.data() + begin, end - begin);
 }
 
@@ -95,8 +114,9 @@ bool save_graph_binary(const Graph &graph, const std::string &path) {
         write_one(out, node.lat);
         write_one(out, node.lon);
     }
-    out.write(reinterpret_cast<const char *>(graph.offsets.data()),
-              static_cast<std::streamsize>(graph.offsets.size() * sizeof(uint64_t)));
+    for (const size_t offset : graph.offsets) {
+        write_one(out, stored_offset(offset));
+    }
     out.write(reinterpret_cast<const char *>(graph.edges.data()),
               static_cast<std::streamsize>(graph.edges.size() * sizeof(Edge)));
     return static_cast<bool>(out);
@@ -129,10 +149,13 @@ Graph load_graph_binary(const std::string &path) {
     graph.offsets.resize(static_cast<size_t>(vertices) + 1);
     graph.edges.resize(static_cast<size_t>(edges));
 
-    in.read(reinterpret_cast<char *>(graph.offsets.data()),
-            static_cast<std::streamsize>(graph.offsets.size() * sizeof(uint64_t)));
-    if (!in) {
-        throw std::runtime_error("corrupted graph file");
+    for (size_t &offset : graph.offsets) {
+        uint64_t stored_offset = 0;
+        read_one(in, stored_offset);
+        if (!in) {
+            throw std::runtime_error("corrupted graph file");
+        }
+        offset = memory_offset(stored_offset);
     }
 
     in.read(reinterpret_cast<char *>(graph.edges.data()),

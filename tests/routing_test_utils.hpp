@@ -17,7 +17,7 @@ inline Graph make_graph(uint32_t vertices, const std::vector<std::vector<Edge>> 
     graph.coords.resize(vertices);
     graph.offsets.assign(static_cast<size_t>(vertices) + 1, 0);
     for (uint32_t v = 0; v < vertices; ++v) {
-        graph.offsets[v + 1] = graph.offsets[v] + static_cast<uint64_t>(rows[v].size());
+        graph.offsets[v + 1] = graph.offsets[v] + rows[v].size();
     }
     for (const std::vector<Edge> &row : rows) {
         graph.edges.insert(graph.edges.end(), row.begin(), row.end());

@@ -3,12 +3,6 @@
 #include <cstddef>
 
 namespace transport::ch {
-namespace {
-
-size_t offset_index(uint64_t offset) { return static_cast<size_t>(offset); }
-
-} // namespace
-
 void WorkGraph::add_or_relax(VertexId from, VertexId to, Weight weight) {
     for (WorkArc &arc : out[from]) {
         if (arc.to != to) {
@@ -57,8 +51,8 @@ std::vector<WorkArc> WorkGraph::uncontracted_out(VertexId v) const {
 WorkGraph::WorkGraph(const Graph &graph) : WorkGraph(graph.vertex_count()) {
     const VertexId vertices = graph.vertex_count();
     for (VertexId from = 0; from < vertices; ++from) {
-        const size_t begin = offset_index(graph.offsets[from]);
-        const size_t end = offset_index(graph.offsets[from + 1]);
+        const size_t begin = graph.offsets[from];
+        const size_t end = graph.offsets[from + 1];
         out[from].reserve(end - begin);
 
         for (size_t edge_index = begin; edge_index < end; ++edge_index) {

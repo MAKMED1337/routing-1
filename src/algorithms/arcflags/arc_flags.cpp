@@ -87,8 +87,8 @@ void ArcFlagsAlgorithm::preprocess() {
 
     // Own-region rule: every arc u→v unconditionally gets bit region_of_[v] set.
     for (VertexId u = 0; u < V; ++u) {
-        for (uint64_t k = graph_.offsets[u], end = graph_.offsets[u + 1]; k < end; ++k) {
-            forward_flags_[static_cast<size_t>(k)] |= 1ULL << region_of_[graph_.edges[static_cast<size_t>(k)].to];
+        for (size_t k = graph_.offsets[u], end = graph_.offsets[u + 1]; k < end; ++k) {
+            forward_flags_[k] |= 1ULL << region_of_[graph_.edges[k].to];
         }
     }
 
@@ -112,7 +112,7 @@ void ArcFlagsAlgorithm::compute_flags(const std::vector<std::vector<VertexId>> &
     }
 
     const VertexId V = graph_.vertex_count();
-    const uint64_t *offsets = graph_.offsets.data();
+    const size_t *offsets = graph_.offsets.data();
     const Edge *edges = graph_.edges.data();
     uint64_t *flags = forward_flags_.data();
     std::atomic<size_t> work_idx{0};
@@ -143,8 +143,8 @@ void ArcFlagsAlgorithm::compute_flags(const std::vector<std::vector<VertexId>> &
 
             for (VertexId u = 0; u < V; ++u) {
                 const Distance *du = &dist[u * B];
-                for (uint64_t k = offsets[u], end = offsets[u + 1]; k < end; ++k) {
-                    const Edge &e = edges[static_cast<size_t>(k)];
+                for (size_t k = offsets[u], end = offsets[u + 1]; k < end; ++k) {
+                    const Edge &e = edges[k];
                     const Distance *dv = &dist[e.to * B];
                     for (size_t lane = 0; lane < B; ++lane) {
                         if (du[lane] == kUnreachable || dv[lane] == kUnreachable) {
@@ -152,8 +152,7 @@ void ArcFlagsAlgorithm::compute_flags(const std::vector<std::vector<VertexId>> &
                         }
                         // Equality rule: arc lies on a shortest path to batch[lane].
                         if (du[lane] == static_cast<Distance>(e.weight) + dv[lane]) {
-                            std::atomic_ref<uint64_t>(flags[static_cast<size_t>(k)])
-                                .fetch_or(mask_bit, std::memory_order_relaxed);
+                            std::atomic_ref<uint64_t>(flags[k]).fetch_or(mask_bit, std::memory_order_relaxed);
                             break;
                         }
                     }
@@ -196,11 +195,11 @@ PathResult ArcFlagsAlgorithm::query(VertexId source, VertexId target) const {
         if (top.v == target) {
             break;
         }
-        for (uint64_t k = graph_.offsets[top.v], end = graph_.offsets[top.v + 1]; k < end; ++k) {
-            if (!(forward_flags_[static_cast<size_t>(k)] & target_bit)) {
+        for (size_t k = graph_.offsets[top.v], end = graph_.offsets[top.v + 1]; k < end; ++k) {
+            if (!(forward_flags_[k] & target_bit)) {
                 continue;
             }
-            const Edge &e = graph_.edges[static_cast<size_t>(k)];
+            const Edge &e = graph_.edges[k];
             const Distance nd = top.key + static_cast<Distance>(e.weight);
             if (nd < dist_.get(e.to)) {
                 dist_.set(e.to, nd);

@@ -2,6 +2,7 @@
 
 #include "graph/types.hpp"
 
+#include <cstddef>
 #include <cstdint>
 #include <span>
 #include <string>
@@ -24,7 +25,7 @@ struct Edge {
 class Graph {
 public:
     std::vector<NodeCoord> coords;
-    std::vector<uint64_t> offsets;
+    std::vector<size_t> offsets;
     std::vector<Edge> edges;
 
     [[nodiscard]] VertexId vertex_count() const;
