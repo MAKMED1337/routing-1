@@ -1,13 +1,11 @@
 #include "algorithms/alt/landmarks.hpp"
 
-#include "algorithms/heap_node.hpp"
+#include "algorithms/shortest_paths.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
-#include <functional>
 #include <numbers>
-#include <queue>
 #include <random>
 #include <string>
 #include <utility>
@@ -15,32 +13,6 @@
 
 namespace transport::alt {
 namespace {
-
-void one_to_all(const Graph &graph, VertexId source, std::vector<Distance> &out) {
-    std::fill(out.begin(), out.end(), kUnreachable);
-    if (source >= graph.vertex_count()) {
-        return;
-    }
-
-    std::priority_queue<HeapNode, std::vector<HeapNode>, std::greater<>> pq;
-    out[source] = 0;
-    pq.push({0, source});
-    while (!pq.empty()) {
-        const HeapNode top = pq.top();
-        pq.pop();
-        if (top.key != out[top.v]) {
-            continue;
-        }
-
-        for (const Edge &edge : graph.adjacent_edges(top.v)) {
-            const Distance next_distance = top.key + edge.weight;
-            if (next_distance < out[edge.to]) {
-                out[edge.to] = next_distance;
-                pq.push({next_distance, edge.to});
-            }
-        }
-    }
-}
 
 std::vector<VertexId> select_random(const Graph &graph, uint32_t landmark_count, std::mt19937 &rng) {
     const size_t vertices = graph.vertex_count();
@@ -73,7 +45,7 @@ std::vector<VertexId> select_farthest(const Graph &graph, uint32_t landmark_coun
     std::vector<Distance> tmp(vertices);
 
     const VertexId seed = static_cast<VertexId>(pick(rng));
-    one_to_all(graph, seed, tmp);
+    dijkstra_one_to_all(graph, seed, tmp);
 
     std::pair<Distance, VertexId> best = {0, seed};
     for (size_t vertex = 0; vertex < vertices; ++vertex) {
@@ -84,7 +56,7 @@ std::vector<VertexId> select_farthest(const Graph &graph, uint32_t landmark_coun
 
     chosen.push_back(best.second);
     selected[best.second] = true;
-    one_to_all(graph, best.second, tmp);
+    dijkstra_one_to_all(graph, best.second, tmp);
     for (size_t vertex = 0; vertex < vertices; ++vertex) {
         min_dist[vertex] = std::min(min_dist[vertex], tmp[vertex]);
     }
@@ -99,7 +71,7 @@ std::vector<VertexId> select_farthest(const Graph &graph, uint32_t landmark_coun
 
         chosen.push_back(best.second);
         selected[best.second] = true;
-        one_to_all(graph, best.second, tmp);
+        dijkstra_one_to_all(graph, best.second, tmp);
         for (size_t vertex = 0; vertex < vertices; ++vertex) {
             min_dist[vertex] = std::min(min_dist[vertex], tmp[vertex]);
         }
@@ -196,10 +168,10 @@ LandmarkSet build_landmarks(const Graph &graph, const Graph &reverse, uint32_t l
     std::vector<Distance> tmp(vertices);
     for (size_t i = 0; i < landmarks.landmarks.size(); ++i) {
         const size_t offset = i * vertices;
-        one_to_all(graph, landmarks.landmarks[i], tmp);
+        dijkstra_one_to_all(graph, landmarks.landmarks[i], tmp);
         std::copy(tmp.begin(), tmp.end(), landmarks.dist_from.begin() + static_cast<std::ptrdiff_t>(offset));
 
-        one_to_all(reverse, landmarks.landmarks[i], tmp);
+        dijkstra_one_to_all(reverse, landmarks.landmarks[i], tmp);
         std::copy(tmp.begin(), tmp.end(), landmarks.dist_to.begin() + static_cast<std::ptrdiff_t>(offset));
     }
 

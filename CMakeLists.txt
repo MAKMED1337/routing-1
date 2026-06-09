@@ -51,6 +51,7 @@ add_library(transport_core
   src/graph/graph.cpp
   src/graph/reverse_graph.cpp
   src/algorithms/routing_algorithm_factory.cpp
+  src/algorithms/shortest_paths.cpp
 )
 target_compile_features(transport_core PUBLIC cxx_std_23)
 target_include_directories(transport_core PUBLIC src)
