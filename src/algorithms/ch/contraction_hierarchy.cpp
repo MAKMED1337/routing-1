@@ -166,6 +166,18 @@ bool settle_next(std::priority_queue<HeapNode, std::vector<HeapNode>, std::great
 
 VertexId ContractionHierarchy::vertex_count() const { return static_cast<VertexId>(rank.size()); }
 
+std::span<const Edge> ContractionHierarchy::forward_adjacent_edges(VertexId vertex) const {
+    const size_t begin = offset_index(forward_offsets[vertex]);
+    const size_t end = offset_index(forward_offsets[vertex + 1]);
+    return {forward_edges.data() + begin, end - begin};
+}
+
+std::span<const Edge> ContractionHierarchy::backward_adjacent_edges(VertexId vertex) const {
+    const size_t begin = offset_index(backward_offsets[vertex]);
+    const size_t end = offset_index(backward_offsets[vertex + 1]);
+    return {backward_edges.data() + begin, end - begin};
+}
+
 ContractionHierarchyAlgorithm::ContractionHierarchyAlgorithm(const Graph &graph)
     : graph_(graph), forward_dist_(graph.vertex_count(), kUnreachable),
       backward_dist_(graph.vertex_count(), kUnreachable) {}
@@ -221,6 +233,13 @@ PathResult ContractionHierarchyAlgorithm::query(VertexId source, VertexId target
 
 uint64_t ContractionHierarchyAlgorithm::auxiliary_edge_count() const {
     return static_cast<uint64_t>(ch_.forward_edges.size() + ch_.backward_edges.size());
+}
+
+const ContractionHierarchy &ContractionHierarchyAlgorithm::get_ch() const {
+    if (!preprocessed_) {
+        throw std::logic_error("ContractionHierarchyAlgorithm::preprocess() must be called before get_ch()");
+    }
+    return ch_;
 }
 
 } // namespace transport
