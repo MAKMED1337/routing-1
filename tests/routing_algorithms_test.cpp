@@ -1,8 +1,10 @@
 #include "algorithms/alt/alt.hpp"
+#include "algorithms/arcflags/arc_flags.hpp"
 #include "algorithms/astar.hpp"
 #include "algorithms/bidirectional_astar.hpp"
 #include "algorithms/bidirectional_dijkstra.hpp"
 #include "algorithms/ch/contraction_hierarchy.hpp"
+#include "algorithms/phast.hpp"
 #include "graph/graph.hpp"
 #include "graph_fixtures.hpp"
 #include "routing_test_utils.hpp"
@@ -77,8 +79,21 @@ bool check_all_algorithms(const transport::Graph &graph) {
     bidi_astar.preprocess();
     bidijkstra.preprocess();
     ch.preprocess();
+
+    // threads=1, threads=2, and threads=16 (more threads than work blocks on small graphs).
+    transport::ArcFlagsAlgorithm af1(graph, transport::PhastAlgorithm(ch.get_ch()), 4, transport::PartitionMethod::Grid,
+                                     1);
+    transport::ArcFlagsAlgorithm af2(graph, transport::PhastAlgorithm(ch.get_ch()), 4, transport::PartitionMethod::Grid,
+                                     2);
+    transport::ArcFlagsAlgorithm af16(graph, transport::PhastAlgorithm(ch.get_ch()), 4,
+                                      transport::PartitionMethod::Grid, 16);
+    af1.preprocess();
+    af2.preprocess();
+    af16.preprocess();
+
     return check_all_pairs(graph, astar) && check_all_pairs(graph, alt) && check_all_pairs(graph, bidi_astar) &&
-           check_all_pairs(graph, bidijkstra) && check_all_pairs(graph, ch);
+           check_all_pairs(graph, bidijkstra) && check_all_pairs(graph, ch) && check_all_pairs(graph, af1) &&
+           check_all_pairs(graph, af2) && check_all_pairs(graph, af16);
 }
 
 } // namespace
@@ -89,6 +104,7 @@ int main() {
     ok &= check_all_algorithms(transport::test::make_witness_graph());
     ok &= check_all_algorithms(transport::test::make_asymmetric_graph());
     ok &= check_all_algorithms(transport::test::make_disconnected_graph());
+    ok &= check_all_algorithms(transport::test::make_grid_graph(4, 4));
     ok &= check_malformed_graph_files_fail_fast();
     if (!ok) {
         std::cerr << "routing algorithm tests FAILED\n";
