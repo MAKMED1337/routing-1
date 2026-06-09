@@ -7,15 +7,24 @@
 
 namespace {
 
+// 4-vertex graph with coordinates and a symmetric ring of edges (0↔1↔2↔3↔0).
+// Coordinates spread across a small lat/lon box so grid/inertial partitions produce distinct buckets.
+// The directed ring symmetrizes to an undirected 4-cycle, which is the minimum connected graph
+// required by KaMinPar.
 transport::Graph make_coord_graph() {
     transport::Graph graph;
     graph.coords = {
         {.lat = 10.0, .lon = 20.0},
         {.lat = 10.0, .lon = 21.0},
-        {.lat = 11.0, .lon = 20.0},
         {.lat = 11.0, .lon = 21.0},
+        {.lat = 11.0, .lon = 20.0},
     };
-    graph.offsets = {0, 0, 0, 0, 0};
+    // Symmetric ring: 0→1, 1→2, 2→3, 3→0 and back-edges 1→0, 2→1, 3→2, 0→3.
+    graph.offsets = {0, 2, 4, 6, 8};
+    graph.edges = {
+        {.to = 1, .weight = 1}, {.to = 3, .weight = 1}, {.to = 0, .weight = 1}, {.to = 2, .weight = 1},
+        {.to = 1, .weight = 1}, {.to = 3, .weight = 1}, {.to = 0, .weight = 1}, {.to = 2, .weight = 1},
+    };
     return graph;
 }
 
@@ -60,6 +69,14 @@ bool check_partition() {
         std::cerr << "partition inertial: expected throw for regions=3 (not a power of 2)\n";
         return false;
     }
+
+#ifdef TRANSPORT_HAVE_KAMINPAR
+    for (const uint16_t regions : {uint16_t{2}, uint16_t{4}}) {
+        if (!check_valid_partition(graph, regions, transport::PartitionMethod::KaMinPar)) {
+            return false;
+        }
+    }
+#endif
 
     // parse_partition_method / partition_method_name round-trip.
     for (const char *name : {"grid", "inertial", "kaminpar"}) {
