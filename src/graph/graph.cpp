@@ -54,7 +54,7 @@ void validate_graph(const Graph &graph, uint64_t expected_edges) {
         throw std::runtime_error("corrupted graph file: final offset must match edge count");
     }
 
-    const uint32_t vertices = graph.vertex_count();
+    const VertexId vertices = graph.vertex_count();
     for (const Edge &edge : graph.edges) {
         if (edge.to >= vertices) {
             throw std::runtime_error("corrupted graph file: edge destination out of range");
@@ -64,7 +64,7 @@ void validate_graph(const Graph &graph, uint64_t expected_edges) {
 
 } // namespace
 
-uint32_t Graph::vertex_count() const { return static_cast<uint32_t>(coords.size()); }
+VertexId Graph::vertex_count() const { return coords.size(); }
 
 uint64_t Graph::edge_count() const { return static_cast<uint64_t>(edges.size()); }
 
@@ -81,7 +81,7 @@ bool save_graph_binary(const Graph &graph, const std::string &path) {
     }
 
     write_one(out, kMagicIntWeights);
-    const uint32_t vertices = graph.vertex_count();
+    const uint32_t vertices = static_cast<uint32_t>(graph.vertex_count());
     const uint64_t edges = graph.edge_count();
     write_one(out, vertices);
     write_one(out, edges);

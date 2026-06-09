@@ -1,10 +1,11 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 
 namespace transport {
 
-using VertexId = uint32_t;
+using VertexId = size_t;
 using Weight = uint32_t;
 using Distance = uint64_t;
 

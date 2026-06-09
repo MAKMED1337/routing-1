@@ -108,13 +108,13 @@ inline void run_benchmark(const BenchmarkArgs &args, const LoadedGraph &loaded, 
     const uint64_t after_preprocess_rss = peak_rss_mb();
 
     std::mt19937 rng(args.seed);
-    std::uniform_int_distribution<uint32_t> pick(0, loaded.graph.vertex_count() - 1);
+    std::uniform_int_distribution<transport::VertexId> pick(0, loaded.graph.vertex_count() - 1);
 
     std::vector<uint64_t> times;
     times.reserve(args.query_count);
     for (uint32_t i = 0; i < args.query_count; ++i) {
-        const uint32_t src = pick(rng);
-        const uint32_t dst = pick(rng);
+        const transport::VertexId src = pick(rng);
+        const transport::VertexId dst = pick(rng);
         const Stopwatch t;
         (void)algo.query(src, dst);
         times.push_back(static_cast<uint64_t>(t.wall_elapsed().count()));
