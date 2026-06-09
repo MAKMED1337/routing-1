@@ -32,8 +32,8 @@ namespace transport {
 // so no shortest-path arc is ever wrongly pruned.
 class ChaseAlgorithm final : public RoutingAlgorithm {
 public:
-    explicit ChaseAlgorithm(const Graph &graph, float core_fraction = 0.05f, uint16_t regions = 64,
-                            PartitionMethod partition_method = PartitionMethod::Inertial, uint32_t threads = 1);
+    explicit ChaseAlgorithm(const Graph &graph, double core_fraction = 0.05, uint16_t regions = 64,
+                            PartitionMethod partition_method = PartitionMethod::Inertial);
 
     std::string_view name() const override;
     void preprocess() override;
@@ -41,15 +41,13 @@ public:
 
 private:
     const Graph &graph_;
-    float core_fraction_;
     uint16_t regions_;
     PartitionMethod partition_method_;
-    uint32_t threads_;
 
     ContractionHierarchy ch_;
     bool preprocessed_ = false;
 
-    uint32_t core_threshold_; // rank >= core_threshold_ => vertex is in core
+    uint32_t core_threshold_; // rank >= core_threshold_ => vertex is in core; set at construction
 
     // Core-forward and core-backward CSRs (upward arcs both in the core).
     std::vector<size_t> cf_offsets_;

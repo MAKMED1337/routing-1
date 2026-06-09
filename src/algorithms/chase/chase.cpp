@@ -18,18 +18,15 @@
 
 namespace transport {
 
-ChaseAlgorithm::ChaseAlgorithm(const Graph &graph, float core_fraction, uint16_t regions,
-                               PartitionMethod partition_method, uint32_t threads)
-    : graph_(graph), core_fraction_(core_fraction), regions_(regions), partition_method_(partition_method),
-      threads_(threads), core_threshold_(0), fwd_dist_(graph.vertex_count(), kUnreachable),
-      bwd_dist_(graph.vertex_count(), kUnreachable) {
+ChaseAlgorithm::ChaseAlgorithm(const Graph &graph, double core_fraction, uint16_t regions,
+                               PartitionMethod partition_method)
+    : graph_(graph), regions_(regions), partition_method_(partition_method),
+      core_threshold_(static_cast<uint32_t>(static_cast<double>(graph.vertex_count()) * (1.0 - core_fraction) + 0.5)),
+      fwd_dist_(graph.vertex_count(), kUnreachable), bwd_dist_(graph.vertex_count(), kUnreachable) {
     if (regions == 0 || regions > 64) {
         throw std::invalid_argument("chase: regions must be in [1, 64]");
     }
-    if (threads == 0) {
-        throw std::invalid_argument("chase: threads must be >= 1");
-    }
-    if (core_fraction <= 0.0f || core_fraction > 1.0f) {
+    if (core_fraction <= 0.0 || core_fraction > 1.0) {
         throw std::invalid_argument("chase: core_fraction must be in (0, 1]");
     }
     if (partition_method_ == PartitionMethod::Inertial && !std::has_single_bit(regions)) {
@@ -47,9 +44,6 @@ void ChaseAlgorithm::preprocess() {
     ContractionHierarchyAlgorithm ch_algo(graph_);
     ch_algo.preprocess();
     ch_ = ch_algo.get_ch();
-
-    const VertexId V = ch_.vertex_count();
-    core_threshold_ = static_cast<uint32_t>(static_cast<float>(V) * (1.0f - core_fraction_) + 0.5f);
 
     region_of_ = build_partition(graph_, regions_, partition_method_);
 
@@ -185,10 +179,7 @@ PathResult ChaseAlgorithm::query(VertexId source, VertexId target) const {
 
         const Distance opp = opp_dist.get(top.v);
         if (opp != kUnreachable) {
-            const Distance cand = top.key + opp;
-            if (cand < mu) {
-                mu = cand;
-            }
+            mu = std::min(mu, top.key + opp);
         }
 
         if (ch_.rank[top.v] >= core_threshold_) {
@@ -196,20 +187,12 @@ PathResult ChaseAlgorithm::query(VertexId source, VertexId target) const {
             return;
         }
 
-        const auto relax = [&](const Edge &e) {
+        const auto adj = is_fwd ? ch_.forward_adjacent_edges(top.v) : ch_.backward_adjacent_edges(top.v);
+        for (const Edge &e : adj) {
             const Distance nd = top.key + static_cast<Distance>(e.weight);
             if (nd < mu && nd < my_dist.get(e.to)) {
                 my_dist.set(e.to, nd);
                 my_pq.push({nd, e.to});
-            }
-        };
-        if (is_fwd) {
-            for (const Edge &e : ch_.forward_adjacent_edges(top.v)) {
-                relax(e);
-            }
-        } else {
-            for (const Edge &e : ch_.backward_adjacent_edges(top.v)) {
-                relax(e);
             }
         }
     };

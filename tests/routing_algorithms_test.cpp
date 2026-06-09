@@ -93,7 +93,7 @@ bool check_all_algorithms(const transport::Graph &graph) {
     af16.preprocess();
 
     // core_fraction=0.5 so even small graphs have a non-trivial core; Grid partition, 4 regions.
-    transport::ChaseAlgorithm chase(graph, 0.5f, 4, transport::PartitionMethod::Grid, 1);
+    transport::ChaseAlgorithm chase(graph, 0.5, 4, transport::PartitionMethod::Grid);
     chase.preprocess();
 
     return check_all_pairs(graph, astar) && check_all_pairs(graph, alt) && check_all_pairs(graph, bidi_astar) &&
