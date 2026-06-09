@@ -38,6 +38,8 @@ target_compile_options(project_warnings INTERFACE
 )
 
 add_library(transport_core
+  src/algorithms/alt/alt.cpp
+  src/algorithms/alt/landmarks.cpp
   src/algorithms/astar.cpp
   src/algorithms/ch/contraction_hierarchy.cpp
   src/algorithms/ch/node_order.cpp

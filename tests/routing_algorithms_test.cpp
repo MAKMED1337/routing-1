@@ -1,3 +1,5 @@
+#include "algorithms/alt/alt.hpp"
+#include "algorithms/alt/landmarks.hpp"
 #include "algorithms/astar.hpp"
 #include "algorithms/bidirectional_astar.hpp"
 #include "algorithms/bidirectional_dijkstra.hpp"
@@ -67,14 +69,45 @@ bool check_malformed_graph_files_fail_fast() {
 bool check_all_algorithms(const transport::Graph &graph) {
     auto zero_heuristic = [](transport::VertexId, transport::VertexId) -> transport::Distance { return 0; };
     transport::AStarAlgorithm astar(graph, zero_heuristic);
+    transport::AltAlgorithm alt(graph, 4, transport::alt::LandmarkStrategy::Farthest, 2, 1);
     transport::BidirectionalAStarAlgorithm bidi_astar(graph, zero_heuristic);
     transport::BidirectionalDijkstraAlgorithm bidijkstra(graph);
     transport::ContractionHierarchyAlgorithm ch(graph);
+    alt.preprocess();
     bidi_astar.preprocess();
     bidijkstra.preprocess();
     ch.preprocess();
-    return check_all_pairs(graph, astar) && check_all_pairs(graph, bidi_astar) && check_all_pairs(graph, bidijkstra) &&
-           check_all_pairs(graph, ch);
+    return check_all_pairs(graph, astar) && check_all_pairs(graph, alt) && check_all_pairs(graph, bidi_astar) &&
+           check_all_pairs(graph, bidijkstra) && check_all_pairs(graph, ch);
+}
+
+bool check_alt_landmark_edges() {
+    const transport::Graph disconnected = make_graph(4, {
+                                                            {{1, 7}},
+                                                            {},
+                                                            {{3, 11}},
+                                                            {},
+                                                        });
+
+    transport::AltAlgorithm random_alt(disconnected, 10, transport::alt::LandmarkStrategy::Random, 10, 1);
+    random_alt.preprocess();
+    if (random_alt.query(0, 0).distance_units != 0) {
+        std::cerr << "ALT source==target query did not return zero\n";
+        return false;
+    }
+    if (random_alt.query(0, 3).distance_units != transport::kUnreachable) {
+        std::cerr << "ALT disconnected query should be unreachable\n";
+        return false;
+    }
+    if (random_alt.landmark_table_bytes() >
+        2ULL * disconnected.vertex_count() * disconnected.vertex_count() * sizeof(transport::Distance)) {
+        std::cerr << "ALT stored more landmark table entries than vertices allow\n";
+        return false;
+    }
+
+    transport::AltAlgorithm farthest_alt(disconnected, 10, transport::alt::LandmarkStrategy::Farthest, 10, 1);
+    farthest_alt.preprocess();
+    return check_all_pairs(disconnected, farthest_alt, "alt farthest oversized landmarks");
 }
 
 } // namespace
@@ -125,6 +158,10 @@ int main() {
     }
 
     if (!check_malformed_graph_files_fail_fast()) {
+        return 1;
+    }
+
+    if (!check_alt_landmark_edges()) {
         return 1;
     }
 
