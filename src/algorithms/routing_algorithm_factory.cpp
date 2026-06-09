@@ -8,6 +8,7 @@
 #include "algorithms/ch/contraction_hierarchy.hpp"
 #include "algorithms/chase/chase.hpp"
 #include "algorithms/dijkstra.hpp"
+#include "algorithms/hl/hub_labels.hpp"
 
 #include <cmath>
 #include <memory>
@@ -44,6 +45,9 @@ std::unique_ptr<RoutingAlgorithm> make_routing_algorithm(const std::string &name
     }
     if (name == "chase") {
         return std::make_unique<ChaseAlgorithm>(graph);
+    }
+    if (name == "hl") {
+        return std::make_unique<HubLabelsAlgorithm>(graph);
     }
     throw std::invalid_argument("unsupported algorithm: " + name);
 }
