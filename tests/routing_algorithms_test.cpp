@@ -4,6 +4,7 @@
 #include "algorithms/bidirectional_dijkstra.hpp"
 #include "algorithms/ch/contraction_hierarchy.hpp"
 #include "graph/graph.hpp"
+#include "graph_fixtures.hpp"
 #include "routing_test_utils.hpp"
 
 #include <filesystem>
@@ -15,7 +16,6 @@
 namespace {
 
 using transport::test::check_all_pairs;
-using transport::test::make_graph;
 
 transport::Graph make_invalid_offsets_graph() {
     transport::Graph graph;
@@ -84,53 +84,15 @@ bool check_all_algorithms(const transport::Graph &graph) {
 } // namespace
 
 int main() {
-    const transport::Graph line = make_graph(4, {
-                                                    {{1, 1}},
-                                                    {{2, 1}},
-                                                    {{3, 1}},
-                                                    {},
-                                                });
-    if (!check_all_algorithms(line)) {
+    bool ok = true;
+    ok &= check_all_algorithms(transport::test::make_line_graph());
+    ok &= check_all_algorithms(transport::test::make_witness_graph());
+    ok &= check_all_algorithms(transport::test::make_asymmetric_graph());
+    ok &= check_all_algorithms(transport::test::make_disconnected_graph());
+    ok &= check_malformed_graph_files_fail_fast();
+    if (!ok) {
+        std::cerr << "routing algorithm tests FAILED\n";
         return 1;
     }
-
-    const transport::Graph directed_with_witness = make_graph(5, {
-                                                                     {{1, 2}, {2, 10}},
-                                                                     {{2, 2}, {3, 20}},
-                                                                     {{3, 2}},
-                                                                     {{4, 2}},
-                                                                     {{1, 1}},
-                                                                 });
-    if (!check_all_algorithms(directed_with_witness)) {
-        return 1;
-    }
-
-    const transport::Graph asymmetric = make_graph(6, {
-                                                          {{1, 1}, {4, 20}},
-                                                          {{2, 1}},
-                                                          {{3, 1}},
-                                                          {{5, 1}},
-                                                          {{3, 1}},
-                                                          {{1, 50}},
-                                                      });
-    if (!check_all_algorithms(asymmetric)) {
-        return 1;
-    }
-
-    const transport::Graph disconnected = make_graph(5, {
-                                                            {{1, 5}},
-                                                            {{2, 5}},
-                                                            {},
-                                                            {{4, 1}},
-                                                            {},
-                                                        });
-    if (!check_all_algorithms(disconnected)) {
-        return 1;
-    }
-
-    if (!check_malformed_graph_files_fail_fast()) {
-        return 1;
-    }
-
     return 0;
 }

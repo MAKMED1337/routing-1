@@ -6,6 +6,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <span>
 #include <string_view>
 #include <vector>
 
@@ -25,6 +26,8 @@ public:
     std::vector<Edge> backward_edges;
 
     [[nodiscard]] VertexId vertex_count() const;
+    [[nodiscard]] std::span<const Edge> forward_adjacent_edges(VertexId vertex) const;
+    [[nodiscard]] std::span<const Edge> backward_adjacent_edges(VertexId vertex) const;
 };
 
 class ContractionHierarchyAlgorithm final : public RoutingAlgorithm {
@@ -36,6 +39,7 @@ public:
     [[nodiscard]] PathResult query(VertexId source, VertexId target) const override;
     [[nodiscard]] uint64_t auxiliary_edge_count() const;
     [[nodiscard]] PreprocessStats preprocess_stats() const { return last_stats_; }
+    [[nodiscard]] const ContractionHierarchy &get_ch() const;
 
 private:
     const Graph &graph_;

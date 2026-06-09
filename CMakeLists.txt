@@ -49,6 +49,7 @@ add_library(transport_core
   src/algorithms/bidirectional_dijkstra.cpp
   src/algorithms/dijkstra.cpp
   src/algorithms/partition.cpp
+  src/algorithms/phast.cpp
   src/graph/graph.cpp
   src/graph/reverse_graph.cpp
   src/algorithms/routing_algorithm_factory.cpp
@@ -89,6 +90,9 @@ if(BUILD_TESTING)
   target_link_libraries(astar_heuristics_tests PRIVATE transport_core project_warnings)
   add_executable(partition_tests tests/partition_test.cpp)
   target_link_libraries(partition_tests PRIVATE transport_core project_warnings)
+  add_executable(phast_tests tests/algorithms/phast_test.cpp)
+  target_include_directories(phast_tests PRIVATE tests)
+  target_link_libraries(phast_tests PRIVATE transport_core project_warnings)
 endif()
 
 add_executable(write_benchmark_graph src/apps/write_benchmark_graph.cpp)
@@ -107,4 +111,5 @@ if(BUILD_TESTING)
   add_test(NAME alt COMMAND alt_tests)
   add_test(NAME astar_heuristics COMMAND astar_heuristics_tests)
   add_test(NAME partition COMMAND partition_tests)
+  add_test(NAME phast COMMAND phast_tests)
 endif()
