@@ -1,19 +1,17 @@
 #pragma once
 
+#include "algorithms/heuristic.hpp"
 #include "algorithms/routing_algorithm.hpp"
 #include "algorithms/stamped_vector.hpp"
 #include "graph/graph.hpp"
 #include "graph/reverse_graph.hpp"
 
-#include <functional>
 #include <string_view>
 
 namespace transport {
 
 class BidirectionalAStarAlgorithm final : public RoutingAlgorithm {
 public:
-    using Heuristic = std::function<Distance(VertexId, VertexId)>;
-
     BidirectionalAStarAlgorithm(const Graph &graph, Heuristic heuristic);
 
     [[nodiscard]] std::string_view name() const override;
