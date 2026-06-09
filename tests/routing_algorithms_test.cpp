@@ -5,6 +5,7 @@
 #include "algorithms/dijkstra.hpp"
 #include "graph/graph.hpp"
 
+#include <cmath>
 #include <cstdint>
 #include <filesystem>
 #include <iostream>
@@ -23,6 +24,40 @@ transport::Graph make_graph(uint32_t vertices, const std::vector<std::vector<tra
     }
     for (const std::vector<transport::Edge> &row : rows) {
         graph.edges.insert(graph.edges.end(), row.begin(), row.end());
+    }
+    return graph;
+}
+
+transport::Graph make_grid_graph(uint32_t rows, uint32_t cols) {
+    constexpr transport::Weight kStepCost = 10;
+    const uint32_t vertices = rows * cols;
+    std::vector<std::vector<transport::Edge>> edges(vertices);
+
+    auto vertex = [cols](uint32_t row, uint32_t col) -> transport::VertexId { return row * cols + col; };
+
+    for (uint32_t row = 0; row < rows; ++row) {
+        for (uint32_t col = 0; col < cols; ++col) {
+            const transport::VertexId from = vertex(row, col);
+            if (row > 0) {
+                edges[from].push_back({vertex(row - 1, col), kStepCost});
+            }
+            if (row + 1 < rows) {
+                edges[from].push_back({vertex(row + 1, col), kStepCost});
+            }
+            if (col > 0) {
+                edges[from].push_back({vertex(row, col - 1), kStepCost});
+            }
+            if (col + 1 < cols) {
+                edges[from].push_back({vertex(row, col + 1), kStepCost});
+            }
+        }
+    }
+
+    transport::Graph graph = make_graph(vertices, edges);
+    for (uint32_t row = 0; row < rows; ++row) {
+        for (uint32_t col = 0; col < cols; ++col) {
+            graph.coords[vertex(row, col)] = {static_cast<double>(row), static_cast<double>(col)};
+        }
     }
     return graph;
 }
@@ -95,8 +130,8 @@ bool check_all_pairs(const transport::Graph &graph, const transport::RoutingAlgo
 }
 
 bool check_all_algorithms(const transport::Graph &graph) {
-    transport::AStarAlgorithm astar(graph);
     auto zero_heuristic = [](transport::VertexId, transport::VertexId) -> transport::Distance { return 0; };
+    transport::AStarAlgorithm astar(graph, zero_heuristic);
     transport::BidirectionalAStarAlgorithm bidi_astar(graph, zero_heuristic);
     transport::BidirectionalDijkstraAlgorithm bidijkstra(graph);
     transport::ContractionHierarchyAlgorithm ch(graph);
@@ -132,6 +167,32 @@ bool check_bidi_astar_nonzero_heuristic(const transport::Graph &graph) {
     return true;
 }
 
+bool check_grid_astar_heuristics() {
+    const transport::Graph graph = make_grid_graph(5, 7);
+
+    auto geometry_heuristic = [&graph](transport::VertexId from, transport::VertexId to) -> transport::Distance {
+        const double d_row = graph.coords[from].lat - graph.coords[to].lat;
+        const double d_col = graph.coords[from].lon - graph.coords[to].lon;
+        return static_cast<transport::Distance>(std::floor(std::sqrt(d_row * d_row + d_col * d_col) * 10.0));
+    };
+
+    auto manhattan_heuristic = [&graph](transport::VertexId from, transport::VertexId to) -> transport::Distance {
+        const double d_row = std::fabs(graph.coords[from].lat - graph.coords[to].lat);
+        const double d_col = std::fabs(graph.coords[from].lon - graph.coords[to].lon);
+        return static_cast<transport::Distance>((d_row + d_col) * 10.0);
+    };
+
+    transport::AStarAlgorithm geometry_astar(graph, geometry_heuristic);
+    transport::AStarAlgorithm manhattan_astar(graph, manhattan_heuristic);
+    transport::BidirectionalAStarAlgorithm geometry_bidi_astar(graph, geometry_heuristic);
+    transport::BidirectionalAStarAlgorithm manhattan_bidi_astar(graph, manhattan_heuristic);
+    geometry_bidi_astar.preprocess();
+    manhattan_bidi_astar.preprocess();
+
+    return check_all_pairs(graph, geometry_astar) && check_all_pairs(graph, manhattan_astar) &&
+           check_all_pairs(graph, geometry_bidi_astar) && check_all_pairs(graph, manhattan_bidi_astar);
+}
+
 } // namespace
 
 int main() {
@@ -145,6 +206,9 @@ int main() {
         return 1;
     }
     if (!check_bidi_astar_nonzero_heuristic(line)) {
+        return 1;
+    }
+    if (!check_grid_astar_heuristics()) {
         return 1;
     }
 

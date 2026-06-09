@@ -17,17 +17,17 @@ std::unique_ptr<RoutingAlgorithm> make_routing_algorithm(const std::string &name
     if (name == "dijkstra") {
         return std::make_unique<DijkstraAlgorithm>(graph);
     }
+    auto haversine_heuristic = [&graph](VertexId from, VertexId to) -> Distance {
+        return static_cast<Distance>(
+            std::floor(haversine_meters(graph.coords[from], graph.coords[to]) * static_cast<double>(kDistanceScale)));
+    };
     if (name == "astar") {
-        return std::make_unique<AStarAlgorithm>(graph);
+        return std::make_unique<AStarAlgorithm>(graph, haversine_heuristic);
     }
     if (name == "bidijkstra") {
         return std::make_unique<BidirectionalDijkstraAlgorithm>(graph);
     }
     if (name == "bidi_astar") {
-        auto haversine_heuristic = [&graph](VertexId from, VertexId to) -> Distance {
-            return static_cast<Distance>(std::floor(haversine_meters(graph.coords[from], graph.coords[to]) *
-                                                    static_cast<double>(kDistanceScale)));
-        };
         return std::make_unique<BidirectionalAStarAlgorithm>(graph, haversine_heuristic);
     }
     if (name == "ch") {
