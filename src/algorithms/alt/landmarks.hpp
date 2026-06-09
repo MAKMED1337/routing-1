@@ -14,10 +14,10 @@ namespace transport::alt {
 enum class LandmarkStrategy { Random, Farthest, Planar };
 
 struct LandmarkSet {
-    std::vector<size_t> landmarks;
+    std::vector<VertexId> landmarks;
     std::vector<Distance> dist_from;
     std::vector<Distance> dist_to;
-    size_t vertex_count = 0;
+    uint32_t vertex_count = 0;
     std::string strategy_name;
 };
 
