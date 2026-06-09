@@ -1,6 +1,7 @@
 #pragma once
 
 #include "algorithms/partition.hpp"
+#include "algorithms/phast.hpp"
 #include "algorithms/routing_algorithm.hpp"
 #include "algorithms/stamped_vector.hpp"
 #include "graph/graph.hpp"
@@ -12,18 +13,16 @@
 
 namespace transport {
 
-struct PhastAlgorithm;
-
 // Arc-flags shortest-path algorithm.
-// Preprocessing: builds a CH, partitions vertices into regions, then computes per-edge uint64_t
-// bitmasks via PHAST all-to-one batch sweeps from each region's boundary vertices (equality rule)
-// plus an own-region rule pass. At query time, standard Dijkstra skips any edge whose flag
-// bitmask does not include the target region's bit.
-// Supports up to 64 regions. Multi-threaded flag computation via threads parameter.
+// Caller builds a PhastAlgorithm from a preprocessed ContractionHierarchy and passes it
+// at construction time. preprocess() then partitions vertices into regions and computes per-edge
+// uint64_t bitmasks via PHAST all-to-one batch sweeps (equality rule) plus an own-region pass.
+// At query time, standard Dijkstra skips edges whose bitmask does not include the target's bit.
+// Supports up to 64 regions. Multi-threaded flag computation via threads parameter (>= 1).
 class ArcFlagsAlgorithm final : public RoutingAlgorithm {
 public:
-    explicit ArcFlagsAlgorithm(const Graph &graph, uint32_t regions = 32, std::string partition_method = "inertial",
-                               uint32_t threads = 1);
+    explicit ArcFlagsAlgorithm(const Graph &graph, PhastAlgorithm phast, uint32_t regions = 32,
+                               std::string partition_method = "inertial", uint32_t threads = 1);
 
     std::string_view name() const override;
     void preprocess() override;
@@ -31,6 +30,7 @@ public:
 
 private:
     const Graph &graph_;
+    PhastAlgorithm phast_;
     uint32_t regions_;
     PartitionMethod partition_method_;
     uint32_t threads_;
@@ -40,7 +40,7 @@ private:
     std::vector<uint64_t> forward_flags_;
     mutable StampedVector<Distance> dist_;
 
-    void compute_flags(const PhastAlgorithm &phast, const std::vector<std::vector<VertexId>> &boundary_by_region);
+    void compute_flags(const std::vector<std::vector<VertexId>> &boundary_by_region);
 };
 
 } // namespace transport

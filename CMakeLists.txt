@@ -46,7 +46,6 @@ add_library(transport_core
   src/algorithms/ch/witness_search.cpp
   src/algorithms/ch/work_graph.cpp
   src/algorithms/arcflags/arc_flags.cpp
-  src/algorithms/region_flags.cpp
   src/algorithms/bidirectional_astar.cpp
   src/algorithms/bidirectional_dijkstra.cpp
   src/algorithms/dijkstra.cpp
