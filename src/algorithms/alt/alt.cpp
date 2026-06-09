@@ -13,13 +13,6 @@
 namespace transport {
 namespace {
 
-Distance lower_bound_term(Distance lhs, Distance rhs) {
-    if (lhs == kUnreachable || rhs == kUnreachable || lhs <= rhs) {
-        return 0;
-    }
-    return lhs - rhs;
-}
-
 Distance landmark_lower_bound(const alt::LandmarkSet &landmarks, size_t landmark_idx, VertexId from, VertexId to) {
     const size_t vertices = landmarks.vertex_count;
     const size_t offset = landmark_idx * vertices;
@@ -28,8 +21,14 @@ Distance landmark_lower_bound(const alt::LandmarkSet &landmarks, size_t landmark
     const Distance from_to_landmark = landmarks.dist_to[offset + from];
     const Distance to_to_landmark = landmarks.dist_to[offset + to];
 
-    return std::max(lower_bound_term(landmark_to_to, landmark_to_from),
-                    lower_bound_term(from_to_landmark, to_to_landmark));
+    Distance lower_bound = 0;
+    if (landmark_to_from != kUnreachable && landmark_to_to != kUnreachable && landmark_to_to > landmark_to_from) {
+        lower_bound = std::max(lower_bound, landmark_to_to - landmark_to_from);
+    }
+    if (from_to_landmark != kUnreachable && to_to_landmark != kUnreachable && from_to_landmark > to_to_landmark) {
+        lower_bound = std::max(lower_bound, from_to_landmark - to_to_landmark);
+    }
+    return lower_bound;
 }
 
 Distance compute_potential(const alt::LandmarkSet &landmarks, const std::vector<size_t> &active_idx, VertexId vertex,

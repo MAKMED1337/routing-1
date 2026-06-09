@@ -109,7 +109,7 @@ std::vector<VertexId> select_farthest(const Graph &graph, uint32_t landmark_coun
     return chosen;
 }
 
-std::vector<VertexId> select_planar(const Graph &graph, uint32_t landmark_count, std::mt19937 &rng) {
+std::vector<VertexId> select_planar(const Graph &graph, uint32_t landmark_count) {
     const size_t vertices = graph.vertex_count();
     if (vertices == 0 || landmark_count == 0) {
         return {};
@@ -128,7 +128,7 @@ std::vector<VertexId> select_planar(const Graph &graph, uint32_t landmark_count,
         }
     }
     if (coord_count == 0) {
-        return select_random(graph, landmark_count, rng);
+        throw std::invalid_argument("planar ALT landmark strategy requires coordinates");
     }
 
     const double center_lat = sum_lat / static_cast<double>(coord_count);
@@ -185,7 +185,7 @@ LandmarkSet build_landmarks(const Graph &graph, const Graph &reverse, uint32_t l
         strategy_name = "farthest";
         break;
     case LandmarkStrategy::Planar:
-        chosen = select_planar(graph, landmark_count, rng);
+        chosen = select_planar(graph, landmark_count);
         strategy_name = "planar";
         break;
     default:

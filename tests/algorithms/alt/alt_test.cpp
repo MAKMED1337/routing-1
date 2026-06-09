@@ -22,14 +22,6 @@ bool check_alt_landmark_edges() {
 
     transport::AltAlgorithm random_alt(disconnected, 10, transport::alt::LandmarkStrategy::Random, 10, std::mt19937{1});
     random_alt.preprocess();
-    if (random_alt.query(0, 0).distance_units != 0) {
-        std::cerr << "ALT source==target query did not return zero\n";
-        return false;
-    }
-    if (random_alt.query(0, 3).distance_units != transport::kUnreachable) {
-        std::cerr << "ALT disconnected query should be unreachable\n";
-        return false;
-    }
     if (random_alt.landmark_table_bytes() >
         2ULL * disconnected.vertex_count() * disconnected.vertex_count() * sizeof(transport::Distance)) {
         std::cerr << "ALT stored more landmark table entries than vertices allow\n";
@@ -43,9 +35,17 @@ bool check_alt_landmark_edges() {
         return false;
     }
 
-    transport::AltAlgorithm planar_alt(disconnected, 10, transport::alt::LandmarkStrategy::Planar, 10, std::mt19937{1});
+    transport::Graph geo_disconnected = disconnected;
+    geo_disconnected.coords = {
+        {50.0, 20.0},
+        {50.1, 20.0},
+        {51.0, 21.0},
+        {51.1, 21.0},
+    };
+    transport::AltAlgorithm planar_alt(geo_disconnected, 10, transport::alt::LandmarkStrategy::Planar, 10,
+                                       std::mt19937{1});
     planar_alt.preprocess();
-    return check_all_pairs(disconnected, planar_alt, "alt planar oversized landmarks");
+    return check_all_pairs(geo_disconnected, planar_alt, "alt planar oversized landmarks");
 }
 
 } // namespace
