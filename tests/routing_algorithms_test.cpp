@@ -1,3 +1,4 @@
+#include "algorithms/alt/alt.hpp"
 #include "algorithms/astar.hpp"
 #include "algorithms/bidirectional_astar.hpp"
 #include "algorithms/bidirectional_dijkstra.hpp"
@@ -7,6 +8,7 @@
 
 #include <filesystem>
 #include <iostream>
+#include <random>
 #include <stdexcept>
 #include <vector>
 
@@ -67,14 +69,16 @@ bool check_malformed_graph_files_fail_fast() {
 bool check_all_algorithms(const transport::Graph &graph) {
     auto zero_heuristic = [](transport::VertexId, transport::VertexId) -> transport::Distance { return 0; };
     transport::AStarAlgorithm astar(graph, zero_heuristic);
+    transport::AltAlgorithm alt(graph, 4, transport::alt::LandmarkStrategy::Farthest, 2, std::mt19937{1});
     transport::BidirectionalAStarAlgorithm bidi_astar(graph, zero_heuristic);
     transport::BidirectionalDijkstraAlgorithm bidijkstra(graph);
     transport::ContractionHierarchyAlgorithm ch(graph);
+    alt.preprocess();
     bidi_astar.preprocess();
     bidijkstra.preprocess();
     ch.preprocess();
-    return check_all_pairs(graph, astar) && check_all_pairs(graph, bidi_astar) && check_all_pairs(graph, bidijkstra) &&
-           check_all_pairs(graph, ch);
+    return check_all_pairs(graph, astar) && check_all_pairs(graph, alt) && check_all_pairs(graph, bidi_astar) &&
+           check_all_pairs(graph, bidijkstra) && check_all_pairs(graph, ch);
 }
 
 } // namespace

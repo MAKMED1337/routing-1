@@ -38,6 +38,8 @@ target_compile_options(project_warnings INTERFACE
 )
 
 add_library(transport_core
+  src/algorithms/alt/alt.cpp
+  src/algorithms/alt/landmarks.cpp
   src/algorithms/astar.cpp
   src/algorithms/ch/contraction_hierarchy.cpp
   src/algorithms/ch/node_order.cpp
@@ -49,6 +51,7 @@ add_library(transport_core
   src/graph/graph.cpp
   src/graph/reverse_graph.cpp
   src/algorithms/routing_algorithm_factory.cpp
+  src/algorithms/shortest_paths.cpp
 )
 target_compile_features(transport_core PUBLIC cxx_std_23)
 target_include_directories(transport_core PUBLIC src)
@@ -67,6 +70,9 @@ target_link_libraries(transport_benchmark PRIVATE transport_core project_warning
 if(BUILD_TESTING)
   add_executable(transport_routing_tests tests/routing_algorithms_test.cpp)
   target_link_libraries(transport_routing_tests PRIVATE transport_core project_warnings)
+  add_executable(alt_tests tests/algorithms/alt/alt_test.cpp)
+  target_include_directories(alt_tests PRIVATE tests)
+  target_link_libraries(alt_tests PRIVATE transport_core project_warnings)
   add_executable(astar_heuristics_tests tests/astar_heuristics_test.cpp)
   target_link_libraries(astar_heuristics_tests PRIVATE transport_core project_warnings)
 endif()
@@ -84,5 +90,6 @@ target_link_libraries(ch_measure PRIVATE bench_harness)
 if(BUILD_TESTING)
   add_test(NAME query_help COMMAND transport_query --help)
   add_test(NAME routing_algorithms COMMAND transport_routing_tests)
+  add_test(NAME alt COMMAND alt_tests)
   add_test(NAME astar_heuristics COMMAND astar_heuristics_tests)
 endif()
