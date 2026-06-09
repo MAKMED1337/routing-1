@@ -20,8 +20,7 @@ namespace transport {
 
 ChaseAlgorithm::ChaseAlgorithm(const Graph &graph, double core_fraction, uint16_t regions,
                                PartitionMethod partition_method)
-    : graph_(graph), regions_(regions), partition_method_(partition_method),
-      core_threshold_(static_cast<uint32_t>(static_cast<double>(graph.vertex_count()) * (1.0 - core_fraction) + 0.5)),
+    : graph_(graph), regions_(regions), partition_method_(partition_method), core_threshold_(0),
       fwd_dist_(graph.vertex_count(), kUnreachable), bwd_dist_(graph.vertex_count(), kUnreachable) {
     if (regions == 0 || regions > 64) {
         throw std::invalid_argument("chase: regions must be in [1, 64]");
@@ -32,6 +31,7 @@ ChaseAlgorithm::ChaseAlgorithm(const Graph &graph, double core_fraction, uint16_
     if (partition_method_ == PartitionMethod::Inertial && !std::has_single_bit(regions)) {
         throw std::invalid_argument("chase: inertial partition requires regions to be a power of two");
     }
+    core_threshold_ = static_cast<uint32_t>(static_cast<double>(graph.vertex_count()) * (1.0 - core_fraction) + 0.5);
 }
 
 std::string_view ChaseAlgorithm::name() const { return "chase"; }
