@@ -369,7 +369,7 @@ void build_csr_edges(const fs::path &raw_segments_path, const std::vector<Mappin
     }
 
     graph.edges.resize(static_cast<size_t>(directed_edges));
-    std::vector<uint64_t> cursor = graph.offsets;
+    std::vector<size_t> cursor = graph.offsets;
 
     {
         std::ifstream in(raw_segments_path, std::ios::binary);
@@ -379,8 +379,8 @@ void build_csr_edges(const fs::path &raw_segments_path, const std::vector<Mappin
         RawSegment segment;
         while (read_record(in, segment)) {
             if (const std::optional<ResolvedEdge> resolved = resolve_segment(segment, mapping, has_coord, graph)) {
-                const uint64_t pos = cursor[resolved->from]++;
-                graph.edges[static_cast<size_t>(pos)] = resolved->edge;
+                const size_t pos = cursor[resolved->from]++;
+                graph.edges[pos] = resolved->edge;
             }
         }
     }

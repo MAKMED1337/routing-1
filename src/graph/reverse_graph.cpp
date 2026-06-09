@@ -20,11 +20,11 @@ Graph build_reverse_graph(const Graph &graph) {
         reverse.offsets[i] += reverse.offsets[i - 1];
     }
 
-    std::vector<uint64_t> next = reverse.offsets;
+    std::vector<size_t> next = reverse.offsets;
     for (VertexId from = 0; from < vertices; ++from) {
         for (const Edge &edge : graph.adjacent_edges(from)) {
-            const uint64_t slot = next[edge.to]++;
-            reverse.edges[static_cast<size_t>(slot)] = Edge{.to = from, .weight = edge.weight};
+            const size_t slot = next[edge.to]++;
+            reverse.edges[slot] = Edge{.to = from, .weight = edge.weight};
         }
     }
 
