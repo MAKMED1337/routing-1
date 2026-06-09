@@ -81,9 +81,12 @@ bool check_all_algorithms(const transport::Graph &graph) {
     ch.preprocess();
 
     // threads=1, threads=2, and threads=16 (more threads than work blocks on small graphs).
-    transport::ArcFlagsAlgorithm af1(graph, transport::PhastAlgorithm(ch.get_ch()), 4, "grid", 1);
-    transport::ArcFlagsAlgorithm af2(graph, transport::PhastAlgorithm(ch.get_ch()), 4, "grid", 2);
-    transport::ArcFlagsAlgorithm af16(graph, transport::PhastAlgorithm(ch.get_ch()), 4, "grid", 16);
+    transport::ArcFlagsAlgorithm af1(graph, transport::PhastAlgorithm(ch.get_ch()), 4, transport::PartitionMethod::Grid,
+                                     1);
+    transport::ArcFlagsAlgorithm af2(graph, transport::PhastAlgorithm(ch.get_ch()), 4, transport::PartitionMethod::Grid,
+                                     2);
+    transport::ArcFlagsAlgorithm af16(graph, transport::PhastAlgorithm(ch.get_ch()), 4,
+                                      transport::PartitionMethod::Grid, 16);
     af1.preprocess();
     af2.preprocess();
     af16.preprocess();

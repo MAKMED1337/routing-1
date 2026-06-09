@@ -9,7 +9,6 @@
 
 #include <cstdint>
 #include <optional>
-#include <string>
 #include <vector>
 
 namespace transport {
@@ -29,9 +28,9 @@ namespace transport {
 class ArcFlagsAlgorithm final : public RoutingAlgorithm {
 public:
     explicit ArcFlagsAlgorithm(const Graph &graph, const PhastAlgorithm &phast, uint16_t regions = 32,
-                               std::string partition_method = "inertial", uint32_t threads = 1);
-    explicit ArcFlagsAlgorithm(const Graph &graph, uint16_t regions = 32, std::string partition_method = "inertial",
-                               uint32_t threads = 1);
+                               PartitionMethod partition_method = PartitionMethod::Inertial, uint32_t threads = 1);
+    explicit ArcFlagsAlgorithm(const Graph &graph, uint16_t regions = 32,
+                               PartitionMethod partition_method = PartitionMethod::Inertial, uint32_t threads = 1);
 
     std::string_view name() const override;
     void preprocess() override;
@@ -49,7 +48,6 @@ private:
     std::vector<uint64_t> forward_flags_;
     mutable StampedVector<Distance> dist_;
 
-    void validate_params(uint16_t regions, uint32_t threads) const;
     void compute_flags(const std::vector<std::vector<VertexId>> &boundary_by_region);
 };
 

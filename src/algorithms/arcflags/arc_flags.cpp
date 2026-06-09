@@ -14,7 +14,6 @@
 #include <cstdint>
 #include <queue>
 #include <stdexcept>
-#include <string>
 #include <string_view>
 #include <thread>
 #include <vector>
@@ -27,7 +26,10 @@ namespace {
 constexpr size_t kBatchSize = 8;
 } // namespace
 
-void ArcFlagsAlgorithm::validate_params(uint16_t regions, uint32_t threads) const {
+ArcFlagsAlgorithm::ArcFlagsAlgorithm(const Graph &graph, uint16_t regions, PartitionMethod partition_method,
+                                     uint32_t threads)
+    : graph_(graph), regions_(regions), partition_method_(partition_method), threads_(threads),
+      dist_(graph.vertex_count(), kUnreachable) {
     if (regions == 0 || regions > 64) {
         throw std::invalid_argument("arcflags: regions must be in [1, 64]");
     }
@@ -40,17 +42,9 @@ void ArcFlagsAlgorithm::validate_params(uint16_t regions, uint32_t threads) cons
 }
 
 ArcFlagsAlgorithm::ArcFlagsAlgorithm(const Graph &graph, const PhastAlgorithm &phast, uint16_t regions,
-                                     std::string partition_method, uint32_t threads)
-    : graph_(graph), phast_(phast), regions_(regions), partition_method_(parse_partition_method(partition_method)),
-      threads_(threads), dist_(graph.vertex_count(), kUnreachable) {
-    validate_params(regions, threads);
-}
-
-ArcFlagsAlgorithm::ArcFlagsAlgorithm(const Graph &graph, uint16_t regions, std::string partition_method,
-                                     uint32_t threads)
-    : graph_(graph), regions_(regions), partition_method_(parse_partition_method(partition_method)), threads_(threads),
-      dist_(graph.vertex_count(), kUnreachable) {
-    validate_params(regions, threads);
+                                     PartitionMethod partition_method, uint32_t threads)
+    : ArcFlagsAlgorithm(graph, regions, partition_method, threads) {
+    phast_ = phast;
 }
 
 std::string_view ArcFlagsAlgorithm::name() const { return "arcflags"; }
