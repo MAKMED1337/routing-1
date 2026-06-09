@@ -1,15 +1,13 @@
 #include "algorithms/hl/hub_labels.hpp"
 
 #include "algorithms/heap_node.hpp"
+#include "algorithms/stopwatch.hpp"
 
 #include <algorithm>
-#include <chrono>
+#include <cmath>
 #include <cstdint>
-#include <ctime>
-#include <functional>
-#include <limits>
 #include <queue>
-#include <sstream>
+#include <span>
 #include <stdexcept>
 #include <string_view>
 #include <unordered_map>
@@ -19,31 +17,18 @@ namespace transport {
 
 namespace {
 
-constexpr uint32_t kInf32 = std::numeric_limits<uint32_t>::max();
-
-using U32Pq = std::priority_queue<HeapNode, std::vector<HeapNode>, std::greater<HeapNode>>;
-
-struct Stopwatch {
-    std::chrono::steady_clock::time_point wall_start = std::chrono::steady_clock::now();
-    std::clock_t cpu_start = std::clock();
-
-    [[nodiscard]] double wall_seconds() const {
-        const auto ns = std::chrono::steady_clock::now() - wall_start;
-        return std::chrono::duration<double>(ns).count();
-    }
-    [[nodiscard]] double cpu_seconds() const { return static_cast<double>(std::clock() - cpu_start) / CLOCKS_PER_SEC; }
-};
+using Pq = std::priority_queue<HeapNode, std::vector<HeapNode>, std::greater<HeapNode>>;
 
 } // namespace
 
-HubLabelsAlgorithm::HubLabelsAlgorithm(const Graph &graph, float label_fraction, uint64_t memory_budget_gb,
+HubLabelsAlgorithm::HubLabelsAlgorithm(const Graph &graph, double label_fraction, uint64_t memory_budget_bytes,
                                        uint32_t threads)
-    : graph_(graph), label_fraction_(label_fraction), memory_budget_gb_(memory_budget_gb), threads_(threads) {
-    if (label_fraction_ <= 0.0f || label_fraction_ > 1.0f || !(label_fraction_ == label_fraction_)) {
+    : graph_(graph), label_fraction_(label_fraction), memory_budget_bytes_(memory_budget_bytes), threads_(threads) {
+    if (label_fraction_ <= 0.0 || label_fraction_ > 1.0 || !std::isfinite(label_fraction_)) {
         throw std::invalid_argument("hl: label_fraction must be in (0, 1]");
     }
-    if (memory_budget_gb_ == 0) {
-        throw std::invalid_argument("hl: memory_budget_gb must be > 0");
+    if (memory_budget_bytes_ == 0) {
+        throw std::invalid_argument("hl: memory_budget_bytes must be > 0");
     }
 }
 
@@ -54,7 +39,7 @@ void HubLabelsAlgorithm::inject_ch(ContractionHierarchy ch) {
     ch_provided_ = true;
 }
 
-// ----- label intersection helpers -----
+// ----- label intersection -----
 
 Distance HubLabelsAlgorithm::intersect_labels(std::span<const HlEntry> f, std::span<const HlEntry> b) {
     Distance best = kUnreachable;
@@ -62,10 +47,8 @@ Distance HubLabelsAlgorithm::intersect_labels(std::span<const HlEntry> f, std::s
     size_t j = 0;
     while (i < f.size() && j < b.size()) {
         if (f[i].hub == b[j].hub) {
-            const Distance d = static_cast<Distance>(f[i].dist) + b[j].dist;
-            if (d < best) {
-                best = d;
-            }
+            const Distance d = f[i].dist <= kUnreachable - b[j].dist ? f[i].dist + b[j].dist : kUnreachable;
+            best = std::min(best, d);
             ++i;
             ++j;
         } else if (f[i].hub < b[j].hub) {
@@ -75,27 +58,6 @@ Distance HubLabelsAlgorithm::intersect_labels(std::span<const HlEntry> f, std::s
         }
     }
     return best;
-}
-
-uint32_t HubLabelsAlgorithm::intersect_u32(const std::vector<HlEntry> &a, const std::vector<HlEntry> &b) {
-    uint64_t best = kInf32;
-    size_t i = 0;
-    size_t j = 0;
-    while (i < a.size() && j < b.size()) {
-        if (a[i].hub == b[j].hub) {
-            const uint64_t d = static_cast<uint64_t>(a[i].dist) + b[j].dist;
-            if (d < best) {
-                best = d;
-            }
-            ++i;
-            ++j;
-        } else if (a[i].hub < b[j].hub) {
-            ++i;
-        } else {
-            ++j;
-        }
-    }
-    return best >= kInf32 ? kInf32 : static_cast<uint32_t>(best);
 }
 
 // ----- preprocess -----
@@ -115,8 +77,8 @@ void HubLabelsAlgorithm::preprocess() {
         stats_.ch_was_injected = true;
     }
 
-    const uint32_t V = static_cast<uint32_t>(ch_.vertex_count());
-    labeled_count_ = static_cast<uint32_t>(static_cast<double>(V) * label_fraction_);
+    const VertexId V = ch_.vertex_count();
+    labeled_count_ = static_cast<VertexId>(static_cast<double>(V) * label_fraction_);
     if (labeled_count_ == 0) {
         labeled_count_ = 1; // at least the apex
     }
@@ -125,22 +87,21 @@ void HubLabelsAlgorithm::preprocess() {
     }
     label_threshold_ = V - labeled_count_;
 
-    fwd_scratch_ = StampedVector<uint32_t>(V, kInf32);
-    bwd_scratch_ = StampedVector<uint32_t>(V, kInf32);
+    fwd_scratch_ = StampedVector<Distance>(V, kUnreachable);
+    bwd_scratch_ = StampedVector<Distance>(V, kUnreachable);
 
     build_labels();
 
     stats_.label_fraction = label_fraction_;
-    stats_.labeled_vertices = labeled_count_;
-    stats_.label_build_wall_s = total_sw.wall_seconds();
-    stats_.label_build_cpu_s = total_sw.cpu_seconds();
+    stats_.labeled_vertices = static_cast<uint32_t>(labeled_count_);
+    stats_.label_build_wall_s = to_seconds(total_sw.wall_elapsed());
+    stats_.label_build_cpu_s = to_seconds(total_sw.cpu_elapsed());
     preprocessed_ = true;
 }
 
 void HubLabelsAlgorithm::build_labels() {
     Stopwatch sw;
-    const uint32_t V = static_cast<uint32_t>(ch_.vertex_count());
-    const uint64_t budget_bytes = memory_budget_gb_ * 1024ULL * 1024 * 1024;
+    const VertexId V = ch_.vertex_count();
 
     // inv_rank[r] = vertex with rank r.
     std::vector<VertexId> inv_rank(V);
@@ -156,104 +117,84 @@ void HubLabelsAlgorithm::build_labels() {
     uint64_t prune_drops = 0;
     uint64_t total_fwd_entries = 0;
     uint64_t total_bwd_entries = 0;
-    uint32_t max_fwd = 0;
-    uint32_t max_bwd = 0;
+    size_t max_fwd = 0;
+    size_t max_bwd = 0;
 
-    // Scratch for candidate gathering.
-    std::unordered_map<VertexId, uint32_t> cand_map;
+    // Scratch for candidate gathering (reused across vertices).
+    std::unordered_map<VertexId, Distance> cand_map;
     cand_map.reserve(512);
     std::vector<HlEntry> sorted_cands;
     sorted_cands.reserve(512);
 
+    // Shared helper: builds one half-label for `vertex` from `offsets`/`edges`, propagating
+    // distances through already-built `own_temp` labels and pruning against `other_temp`.
+    auto build_half = [&](VertexId vertex, const std::vector<uint64_t> &offsets, const std::vector<Edge> &edges,
+                          std::vector<std::vector<HlEntry>> &own_temp,
+                          const std::vector<std::vector<HlEntry>> &other_temp) -> std::vector<HlEntry> & {
+        cand_map.clear();
+        cand_map[vertex] = Distance{0};
+        for (const Edge &e : std::span(edges).subspan(static_cast<size_t>(offsets[vertex]),
+                                                      static_cast<size_t>(offsets[vertex + 1] - offsets[vertex]))) {
+            for (const HlEntry &he : own_temp[e.to]) {
+                const Distance nd = he.dist <= kUnreachable - e.weight ? he.dist + e.weight : kUnreachable;
+                auto [it, inserted] = cand_map.emplace(he.hub, nd);
+                if (!inserted && nd < it->second) {
+                    it->second = nd;
+                }
+            }
+        }
+        sorted_cands.clear();
+        for (const auto &[h, d] : cand_map) {
+            sorted_cands.push_back({h, d});
+        }
+        std::sort(sorted_cands.begin(), sorted_cands.end());
+
+        std::vector<HlEntry> &label = own_temp[vertex];
+        label.clear();
+        for (const HlEntry &cand : sorted_cands) {
+            if (intersect_labels(std::span(label), std::span<const HlEntry>(other_temp[cand.hub])) < cand.dist) {
+                ++prune_drops;
+            } else {
+                label.push_back(cand);
+            }
+        }
+        return label;
+    };
+
     // Process labeled vertices in descending rank order.
-    for (uint32_t rank = V; rank-- > label_threshold_;) {
+    for (VertexId rank = V; rank-- > label_threshold_;) {
         const VertexId v = inv_rank[rank];
 
-        // --- Build L_f(v) ---
-        cand_map.clear();
-        cand_map[v] = 0;
-        for (uint64_t i = ch_.forward_offsets[v], end = ch_.forward_offsets[v + 1]; i < end; ++i) {
-            const Edge &e = ch_.forward_edges[static_cast<size_t>(i)];
-            // u has higher rank → labeled → temp_fwd[u] is already built.
-            for (const HlEntry &he : temp_fwd[e.to]) {
-                const uint64_t d64 = static_cast<uint64_t>(he.dist) + e.weight;
-                const uint32_t d = d64 >= kInf32 ? kInf32 : static_cast<uint32_t>(d64);
-                auto [it, inserted] = cand_map.emplace(he.hub, d);
-                if (!inserted && d < it->second) {
-                    it->second = d;
-                }
-            }
-        }
-        sorted_cands.clear();
-        for (const auto &[h, d] : cand_map) {
-            sorted_cands.push_back({h, d});
-        }
-        std::sort(sorted_cands.begin(), sorted_cands.end());
-
-        std::vector<HlEntry> &lf = temp_fwd[v];
-        lf.clear();
-        for (const HlEntry &cand : sorted_cands) {
-            const uint32_t check = intersect_u32(lf, temp_bwd[cand.hub]);
-            if (check < cand.dist) {
-                ++prune_drops;
-            } else {
-                lf.push_back(cand);
-            }
-        }
-
-        // --- Build L_b(v) ---
-        cand_map.clear();
-        cand_map[v] = 0;
-        for (uint64_t i = ch_.backward_offsets[v], end = ch_.backward_offsets[v + 1]; i < end; ++i) {
-            const Edge &e = ch_.backward_edges[static_cast<size_t>(i)];
-            for (const HlEntry &he : temp_bwd[e.to]) {
-                const uint64_t d64 = static_cast<uint64_t>(he.dist) + e.weight;
-                const uint32_t d = d64 >= kInf32 ? kInf32 : static_cast<uint32_t>(d64);
-                auto [it, inserted] = cand_map.emplace(he.hub, d);
-                if (!inserted && d < it->second) {
-                    it->second = d;
-                }
-            }
-        }
-        sorted_cands.clear();
-        for (const auto &[h, d] : cand_map) {
-            sorted_cands.push_back({h, d});
-        }
-        std::sort(sorted_cands.begin(), sorted_cands.end());
-
-        std::vector<HlEntry> &lb = temp_bwd[v];
-        lb.clear();
-        for (const HlEntry &cand : sorted_cands) {
-            const uint32_t check = intersect_u32(temp_fwd[cand.hub], lb);
-            if (check < cand.dist) {
-                ++prune_drops;
-            } else {
-                lb.push_back(cand);
-            }
-        }
+        const std::vector<HlEntry> &lf = build_half(v, ch_.forward_offsets, ch_.forward_edges, temp_fwd, temp_bwd);
+        const std::vector<HlEntry> &lb = build_half(v, ch_.backward_offsets, ch_.backward_edges, temp_bwd, temp_fwd);
 
         total_fwd_entries += lf.size();
         total_bwd_entries += lb.size();
-        if (static_cast<uint32_t>(lf.size()) > max_fwd) {
-            max_fwd = static_cast<uint32_t>(lf.size());
-        }
-        if (static_cast<uint32_t>(lb.size()) > max_bwd) {
-            max_bwd = static_cast<uint32_t>(lb.size());
-        }
+        max_fwd = std::max(max_fwd, lf.size());
+        max_bwd = std::max(max_bwd, lb.size());
 
         // Incremental memory budget check every 64k vertices.
-        // Peak memory = 2 × label_data (temp vectors + CSR copy coexist during assembly)
-        //             + fixed overhead (temp vector headers, inv_rank, offsets, CH, graph ≈ 3 GB).
-        const uint32_t processed = V - rank;
+        // Peak memory ≈ 2 × label_data (temp vectors + CSR copy coexist during assembly)
+        //             + fixed overhead (CH arcs, graph edges, per-vertex scratch).
+        const VertexId processed = V - rank;
         if ((processed & 0xFFFFu) == 0 && processed > 0) {
             const uint64_t bytes_so_far = (total_fwd_entries + total_bwd_entries) * sizeof(HlEntry);
-            const uint64_t projected_label_bytes = bytes_so_far * labeled_count_ / processed;
-            // fixed: temp vector headers (V×48) + inv_rank (V×4) + scratch (V×8) + offsets (V×16) + CH+graph (~2 GB)
-            const uint64_t fixed_bytes = static_cast<uint64_t>(V) * 76 + 2ULL * 1024 * 1024 * 1024;
+            const uint64_t projected_label_bytes =
+                bytes_so_far * static_cast<uint64_t>(labeled_count_) / static_cast<uint64_t>(processed);
+            // Fixed overhead: CH arcs + graph edges + per-vertex: temp vector headers (2×24),
+            // inv_rank (8), fwd/bwd scratch (2×8), fwd/bwd offsets being built (2×8).
+            const uint64_t fixed_bytes =
+                (ch_.forward_edges.size() + ch_.backward_edges.size()) * sizeof(Edge) +
+                (ch_.forward_offsets.size() + ch_.backward_offsets.size()) * sizeof(uint64_t) +
+                ch_.rank.size() * sizeof(uint32_t) + graph_.edges.size() * sizeof(Edge) +
+                graph_.offsets.size() * sizeof(size_t) +
+                static_cast<uint64_t>(V) *
+                    (2 * sizeof(std::vector<HlEntry>) + sizeof(VertexId) + 2 * sizeof(Distance) + 2 * sizeof(uint64_t));
             const uint64_t projected_peak = 2 * projected_label_bytes + fixed_bytes;
-            if (projected_peak > budget_bytes) {
-                throw std::runtime_error("hl: projected peak memory " + std::to_string(projected_peak / (1024 * 1024)) +
-                                         " MB exceeds budget " + std::to_string(memory_budget_gb_) +
+            if (projected_peak > memory_budget_bytes_) {
+                throw std::runtime_error("hl: projected peak memory " +
+                                         std::to_string(projected_peak / (1024ULL * 1024)) + " MB exceeds budget " +
+                                         std::to_string(memory_budget_bytes_ / (1024ULL * 1024 * 1024)) +
                                          " GB after processing " + std::to_string(processed) + " of " +
                                          std::to_string(labeled_count_) + " labeled vertices");
             }
@@ -280,115 +221,57 @@ void HubLabelsAlgorithm::build_labels() {
 
     const double label_bytes = static_cast<double>((total_fwd_entries + total_bwd_entries) * sizeof(HlEntry));
 
-    stats_.label_build_wall_s = sw.wall_seconds();
-    stats_.label_build_cpu_s = sw.cpu_seconds();
-    stats_.avg_label_size_fwd = labeled_count_ > 0 ? static_cast<double>(total_fwd_entries) / labeled_count_ : 0.0;
-    stats_.avg_label_size_bwd = labeled_count_ > 0 ? static_cast<double>(total_bwd_entries) / labeled_count_ : 0.0;
+    stats_.label_build_wall_s = to_seconds(sw.wall_elapsed());
+    stats_.label_build_cpu_s = to_seconds(sw.cpu_elapsed());
+    stats_.avg_label_size_fwd =
+        labeled_count_ > 0 ? static_cast<double>(total_fwd_entries) / static_cast<double>(labeled_count_) : 0.0;
+    stats_.avg_label_size_bwd =
+        labeled_count_ > 0 ? static_cast<double>(total_bwd_entries) / static_cast<double>(labeled_count_) : 0.0;
     stats_.max_label_size_fwd = max_fwd;
     stats_.max_label_size_bwd = max_bwd;
     stats_.label_memory_mb = label_bytes / (1024.0 * 1024.0);
     stats_.prune_drops = prune_drops;
 }
 
-// ----- collect helpers -----
+// ----- collect (shared upward-search helper) -----
 
-void HubLabelsAlgorithm::collect_fwd(VertexId source, std::vector<HlEntry> &out,
-                                     std::vector<VertexId> &unlabeled_settled) const {
-    // Upward search from source on CH forward arcs.
-    // Stops relaxing at labeled vertices; collects their forward labels.
-    std::unordered_map<VertexId, uint32_t> hub_best;
+void HubLabelsAlgorithm::collect(VertexId start, const std::vector<uint64_t> &ch_offsets,
+                                 const std::vector<Edge> &ch_edges, const std::vector<uint64_t> &label_offsets,
+                                 const std::vector<HlEntry> &label_data, StampedVector<Distance> &scratch,
+                                 std::vector<HlEntry> &out, std::vector<VertexId> &unlabeled_settled) const {
+    std::unordered_map<VertexId, Distance> hub_best;
     hub_best.reserve(256);
 
-    U32Pq pq;
-    fwd_scratch_.set(source, 0);
-    pq.push({0, source});
+    Pq pq;
+    scratch.set(start, Distance{0});
+    pq.push({Distance{0}, start});
 
     while (!pq.empty()) {
         const HeapNode top = pq.top();
         pq.pop();
-        const uint32_t top_key = static_cast<uint32_t>(top.key);
-        if (top_key != fwd_scratch_.get(top.v)) {
+        if (top.key != scratch.get(top.v)) {
             continue;
         }
         if (is_labeled(top.v)) {
-            // Collect labels, don't relax.
-            for (const HlEntry &e : fwd_label(top.v)) {
-                const uint64_t d64 = static_cast<uint64_t>(top_key) + e.dist;
-                if (d64 >= kInf32) {
-                    continue;
-                }
-                const uint32_t d = static_cast<uint32_t>(d64);
-                auto [it, inserted] = hub_best.emplace(e.hub, d);
-                if (!inserted && d < it->second) {
-                    it->second = d;
+            const auto label_span =
+                std::span(label_data.data() + label_offsets[top.v], label_data.data() + label_offsets[top.v + 1]);
+            for (const HlEntry &e : label_span) {
+                const Distance nd = top.key <= kUnreachable - e.dist ? top.key + e.dist : kUnreachable;
+                auto [it, inserted] = hub_best.emplace(e.hub, nd);
+                if (!inserted && nd < it->second) {
+                    it->second = nd;
                 }
             }
             continue;
         }
         unlabeled_settled.push_back(top.v);
-        for (uint64_t i = ch_.forward_offsets[top.v], end = ch_.forward_offsets[top.v + 1]; i < end; ++i) {
-            const Edge &e = ch_.forward_edges[static_cast<size_t>(i)];
-            const uint64_t nd64 = static_cast<uint64_t>(top_key) + e.weight;
-            if (nd64 >= kInf32) {
-                continue;
-            }
-            const uint32_t nd = static_cast<uint32_t>(nd64);
-            if (nd < fwd_scratch_.get(e.to)) {
-                fwd_scratch_.set(e.to, nd);
-                pq.push({static_cast<Distance>(nd), e.to});
-            }
-        }
-    }
-
-    out.clear();
-    out.reserve(hub_best.size());
-    for (const auto &[h, d] : hub_best) {
-        out.push_back({h, d});
-    }
-    std::sort(out.begin(), out.end());
-}
-
-void HubLabelsAlgorithm::collect_bwd(VertexId target, std::vector<HlEntry> &out,
-                                     std::vector<VertexId> &unlabeled_settled) const {
-    std::unordered_map<VertexId, uint32_t> hub_best;
-    hub_best.reserve(256);
-
-    U32Pq pq;
-    bwd_scratch_.set(target, 0);
-    pq.push({0, target});
-
-    while (!pq.empty()) {
-        const HeapNode top = pq.top();
-        pq.pop();
-        const uint32_t top_key = static_cast<uint32_t>(top.key);
-        if (top_key != bwd_scratch_.get(top.v)) {
-            continue;
-        }
-        if (is_labeled(top.v)) {
-            for (const HlEntry &e : bwd_label(top.v)) {
-                const uint64_t d64 = static_cast<uint64_t>(top_key) + e.dist;
-                if (d64 >= kInf32) {
-                    continue;
-                }
-                const uint32_t d = static_cast<uint32_t>(d64);
-                auto [it, inserted] = hub_best.emplace(e.hub, d);
-                if (!inserted && d < it->second) {
-                    it->second = d;
-                }
-            }
-            continue;
-        }
-        unlabeled_settled.push_back(top.v);
-        for (uint64_t i = ch_.backward_offsets[top.v], end = ch_.backward_offsets[top.v + 1]; i < end; ++i) {
-            const Edge &e = ch_.backward_edges[static_cast<size_t>(i)];
-            const uint64_t nd64 = static_cast<uint64_t>(top_key) + e.weight;
-            if (nd64 >= kInf32) {
-                continue;
-            }
-            const uint32_t nd = static_cast<uint32_t>(nd64);
-            if (nd < bwd_scratch_.get(e.to)) {
-                bwd_scratch_.set(e.to, nd);
-                pq.push({static_cast<Distance>(nd), e.to});
+        for (const Edge &e :
+             std::span(ch_edges).subspan(static_cast<size_t>(ch_offsets[top.v]),
+                                         static_cast<size_t>(ch_offsets[top.v + 1] - ch_offsets[top.v]))) {
+            const Distance nd = top.key <= kUnreachable - e.weight ? top.key + e.weight : kUnreachable;
+            if (nd < scratch.get(e.to)) {
+                scratch.set(e.to, nd);
+                pq.push({nd, e.to});
             }
         }
     }
@@ -414,14 +297,16 @@ PathResult HubLabelsAlgorithm::query(VertexId source, VertexId target) const {
         // source labeled, target unlabeled
         bwd_scratch_.reset();
         std::vector<VertexId> dummy;
-        collect_bwd(target, collect_buf_bwd_, dummy);
+        collect(target, ch_.backward_offsets, ch_.backward_edges, bwd_offsets_, bwd_labels_, bwd_scratch_,
+                collect_buf_bwd_, dummy);
         bwd_scratch_.reset();
         dist = intersect_labels(fwd_label(source), collect_buf_bwd_);
     } else if (t_lab) {
         // source unlabeled, target labeled
         fwd_scratch_.reset();
         std::vector<VertexId> dummy;
-        collect_fwd(source, collect_buf_fwd_, dummy);
+        collect(source, ch_.forward_offsets, ch_.forward_edges, fwd_offsets_, fwd_labels_, fwd_scratch_,
+                collect_buf_fwd_, dummy);
         fwd_scratch_.reset();
         dist = intersect_labels(collect_buf_fwd_, bwd_label(target));
     } else {
@@ -431,19 +316,19 @@ PathResult HubLabelsAlgorithm::query(VertexId source, VertexId target) const {
 
         std::vector<VertexId> fwd_unlabeled;
         std::vector<VertexId> bwd_unlabeled;
-        collect_fwd(source, collect_buf_fwd_, fwd_unlabeled);
-        collect_bwd(target, collect_buf_bwd_, bwd_unlabeled);
+        collect(source, ch_.forward_offsets, ch_.forward_edges, fwd_offsets_, fwd_labels_, fwd_scratch_,
+                collect_buf_fwd_, fwd_unlabeled);
+        collect(target, ch_.backward_offsets, ch_.backward_edges, bwd_offsets_, bwd_labels_, bwd_scratch_,
+                collect_buf_bwd_, bwd_unlabeled);
 
-        // mu_low: min dist_fwd[v] + dist_bwd[v] over vertices settled in both searches.
+        // mu_low: min dist_fwd[v] + dist_bwd[v] over fwd-settled unlabeled vertices.
         Distance mu_low = kUnreachable;
         for (const VertexId v : fwd_unlabeled) {
-            const uint32_t df = fwd_scratch_.get(v);
-            const uint32_t db = bwd_scratch_.get(v);
-            if (df != kInf32 && db != kInf32) {
-                const Distance candidate = static_cast<Distance>(df) + db;
-                if (candidate < mu_low) {
-                    mu_low = candidate;
-                }
+            const Distance db = bwd_scratch_.get(v);
+            if (db != kUnreachable) {
+                const Distance df = fwd_scratch_.get(v);
+                const Distance candidate = df <= kUnreachable - db ? df + db : kUnreachable;
+                mu_low = std::min(mu_low, candidate);
             }
         }
 

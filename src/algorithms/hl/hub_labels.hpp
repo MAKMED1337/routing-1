@@ -28,8 +28,8 @@ namespace transport {
 //   Symmetric for L_b.
 class HubLabelsAlgorithm final : public RoutingAlgorithm {
 public:
-    explicit HubLabelsAlgorithm(const Graph &graph, float label_fraction = 0.25f, uint64_t memory_budget_gb = 18,
-                                uint32_t threads = 1);
+    explicit HubLabelsAlgorithm(const Graph &graph, double label_fraction = 0.25,
+                                uint64_t memory_budget_bytes = 18ULL * 1024 * 1024 * 1024, uint32_t threads = 1);
 
     std::string_view name() const override;
     void preprocess() override;
@@ -39,12 +39,12 @@ public:
     [[nodiscard]] const ContractionHierarchy &get_ch() const { return ch_; }
 
     struct HlStats {
-        float label_fraction = 0.0f;
+        double label_fraction = 0.0;
         uint32_t labeled_vertices = 0;
         double avg_label_size_fwd = 0.0;
         double avg_label_size_bwd = 0.0;
-        uint32_t max_label_size_fwd = 0;
-        uint32_t max_label_size_bwd = 0;
+        size_t max_label_size_fwd = 0;
+        size_t max_label_size_bwd = 0;
         double label_memory_mb = 0.0;
         double label_build_wall_s = 0.0;
         double label_build_cpu_s = 0.0;
@@ -56,23 +56,26 @@ public:
 
 private:
     const Graph &graph_;
-    float label_fraction_;
-    uint64_t memory_budget_gb_;
+    double label_fraction_;
+    uint64_t memory_budget_bytes_;
     uint32_t threads_;
 
     ContractionHierarchy ch_;
     bool ch_provided_ = false;
     bool preprocessed_ = false;
 
-    uint32_t label_threshold_ = 0; // rank >= this → labeled
-    uint32_t labeled_count_ = 0;
+    VertexId label_threshold_ = 0; // rank >= this → labeled
+    VertexId labeled_count_ = 0;
 
     // Label entry: sorted by hub within each vertex's label.
+    // HlEntry is not HeapNode: HeapNode sorts by key; HlEntry sorts by hub.
+    // dist is Distance (uint64_t). sizeof(HlEntry)==16: hub(8)+dist(8), no padding.
     struct HlEntry {
         VertexId hub;
-        uint32_t dist;
+        Distance dist;
         bool operator<(const HlEntry &o) const { return hub < o.hub; }
     };
+    static_assert(sizeof(HlEntry) == 16);
 
     // CSR labels indexed by vertex_id; unlabeled vertices have empty ranges.
     std::vector<uint64_t> fwd_offsets_; // size V+1
@@ -82,9 +85,9 @@ private:
 
     HlStats stats_;
 
-    // Scratch for query-time upward searches.
-    mutable StampedVector<uint32_t> fwd_scratch_{1, ~0u};
-    mutable StampedVector<uint32_t> bwd_scratch_{1, ~0u};
+    // Scratch for query-time upward searches; resized to V in preprocess().
+    mutable StampedVector<Distance> fwd_scratch_{1, kUnreachable};
+    mutable StampedVector<Distance> bwd_scratch_{1, kUnreachable};
     // Reusable collect buffers (per-query; single-threaded queries).
     mutable std::vector<HlEntry> collect_buf_fwd_;
     mutable std::vector<HlEntry> collect_buf_bwd_;
@@ -101,17 +104,15 @@ private:
     // Minimum d_f + d_b over all matching hubs; returns kUnreachable if no match.
     [[nodiscard]] static Distance intersect_labels(std::span<const HlEntry> f, std::span<const HlEntry> b);
 
-    // uint32_t variant for pruning during build.
-    [[nodiscard]] static uint32_t intersect_u32(const std::vector<HlEntry> &a, const std::vector<HlEntry> &b);
-
     void build_labels();
 
-    // Collect forward hub-label from unlabeled source via upward CH search.
-    // Stops relaxing at labeled vertices; collects their labels.
-    // Settled (source-reachable) vertices written into fwd_scratch_ (caller resets).
-    // Settled unlabeled vertices appended to `unlabeled_settled`.
-    void collect_fwd(VertexId source, std::vector<HlEntry> &out, std::vector<VertexId> &unlabeled_settled) const;
-    void collect_bwd(VertexId target, std::vector<HlEntry> &out, std::vector<VertexId> &unlabeled_settled) const;
+    // Upward CH search from `start`, stopping at labeled vertices and collecting
+    // their labels from `label_offsets`/`label_data`.  Settled unlabeled vertices
+    // appended to `unlabeled_settled`; caller resets `scratch` before and after.
+    void collect(VertexId start, const std::vector<uint64_t> &ch_offsets, const std::vector<Edge> &ch_edges,
+                 const std::vector<uint64_t> &label_offsets, const std::vector<HlEntry> &label_data,
+                 StampedVector<Distance> &scratch, std::vector<HlEntry> &out,
+                 std::vector<VertexId> &unlabeled_settled) const;
 };
 
 } // namespace transport

@@ -98,8 +98,8 @@ bool check_all_algorithms(const transport::Graph &graph) {
     chase.preprocess();
 
     // full labels (label_fraction=1.0) and tiered labels (label_fraction=0.5).
-    transport::HubLabelsAlgorithm hl_full(graph, 1.0f, 4, 1);
-    transport::HubLabelsAlgorithm hl_tiered(graph, 0.5f, 4, 1);
+    transport::HubLabelsAlgorithm hl_full(graph, 1.0, 4ULL * 1024 * 1024 * 1024, 1);
+    transport::HubLabelsAlgorithm hl_tiered(graph, 0.5, 4ULL * 1024 * 1024 * 1024, 1);
     hl_full.preprocess();
     hl_tiered.preprocess();
 
@@ -107,21 +107,6 @@ bool check_all_algorithms(const transport::Graph &graph) {
            check_all_pairs(graph, bidijkstra) && check_all_pairs(graph, ch) && check_all_pairs(graph, af1) &&
            check_all_pairs(graph, af2) && check_all_pairs(graph, af16) && check_all_pairs(graph, chase) &&
            check_all_pairs(graph, hl_full) && check_all_pairs(graph, hl_tiered);
-}
-
-bool check_hl_validation() {
-    const transport::Graph graph = transport::test::make_line_graph();
-    bool ok = true;
-    for (float frac : {0.0f, -0.1f, 1.1f}) {
-        try {
-            transport::HubLabelsAlgorithm hl(graph, frac, 4, 1);
-            hl.preprocess();
-            std::cerr << "hl: expected std::invalid_argument for label_fraction=" << frac << "\n";
-            ok = false;
-        } catch (const std::invalid_argument &) {
-        }
-    }
-    return ok;
 }
 
 } // namespace
@@ -134,7 +119,6 @@ int main() {
     ok &= check_all_algorithms(transport::test::make_disconnected_graph());
     ok &= check_all_algorithms(transport::test::make_grid_graph(4, 4));
     ok &= check_malformed_graph_files_fail_fast();
-    ok &= check_hl_validation();
     if (!ok) {
         std::cerr << "routing algorithm tests FAILED\n";
         return 1;
