@@ -2,8 +2,6 @@
 
 #include "algorithms/heap_node.hpp"
 
-#include <cstddef>
-#include <cstdint>
 #include <string_view>
 
 namespace transport {
@@ -18,7 +16,7 @@ PathResult DijkstraAlgorithm::query(VertexId source, VertexId target) const {
     dist_.set(source, 0);
     pq.push({0, source});
 
-    uint32_t settled = 0;
+    QueryStats stats;
     while (!pq.empty()) {
         const HeapNode top = pq.top();
         pq.pop();
@@ -26,21 +24,23 @@ PathResult DijkstraAlgorithm::query(VertexId source, VertexId target) const {
             continue;
         }
 
-        ++settled;
+        ++stats.settled;
         if (top.v == target) {
             break;
         }
 
         for (const Edge &e : graph_.adjacent_edges(top.v)) {
+            ++stats.relaxed_arcs;
             const Distance nd = top.key + e.weight;
             if (nd < dist_.get(e.to)) {
                 dist_.set(e.to, nd);
                 pq.push({nd, e.to});
+                ++stats.heap_pushes;
             }
         }
     }
 
-    return PathResult{dist_.get(target), settled};
+    return PathResult{dist_.get(target), stats};
 }
 
 } // namespace transport

@@ -155,7 +155,7 @@ PathResult ChaseAlgorithm::query(VertexId source, VertexId target) const {
     std::vector<std::pair<VertexId, Distance>> bwd_entries;
 
     Distance mu = kUnreachable;
-    uint32_t settled = 0;
+    QueryStats stats;
 
     // Phase 1: bidirectional CH upward search. Core vertices are collected into entry sets
     // without relaxing their edges; non-core vertices are settled normally.
@@ -171,7 +171,12 @@ PathResult ChaseAlgorithm::query(VertexId source, VertexId target) const {
         if (top.key != my_dist.get(top.v)) {
             return;
         }
-        ++settled;
+        ++stats.settled;
+        if (is_fwd) {
+            ++stats.settled_forward;
+        } else {
+            ++stats.settled_backward;
+        }
 
         const Distance opp = opp_dist.get(top.v);
         if (opp != kUnreachable) {
@@ -185,10 +190,12 @@ PathResult ChaseAlgorithm::query(VertexId source, VertexId target) const {
 
         const auto adj = is_fwd ? ch_.forward_adjacent_edges(top.v) : ch_.backward_adjacent_edges(top.v);
         for (const Edge &e : adj) {
+            ++stats.relaxed_arcs;
             const Distance nd = top.key + static_cast<Distance>(e.weight);
             if (nd < mu && nd < my_dist.get(e.to)) {
                 my_dist.set(e.to, nd);
                 my_pq.push({nd, e.to});
+                ++stats.heap_pushes;
             }
         }
     };
@@ -249,7 +256,12 @@ PathResult ChaseAlgorithm::query(VertexId source, VertexId target) const {
             if (top.key != my_dist.get(top.v)) {
                 return;
             }
-            ++settled;
+            ++stats.settled;
+            if (is_fwd) {
+                ++stats.settled_forward;
+            } else {
+                ++stats.settled_backward;
+            }
 
             const Distance opp = opp_dist.get(top.v);
             if (opp != kUnreachable) {
@@ -260,7 +272,9 @@ PathResult ChaseAlgorithm::query(VertexId source, VertexId target) const {
             }
 
             for (size_t k = my_off[top.v]; k < my_off[top.v + 1]; ++k) {
+                ++stats.relaxed_arcs;
                 if (!(my_flags[k] & prune_mask)) {
+                    ++stats.pruned_by_flag;
                     continue;
                 }
                 const Edge &e = my_edges[k];
@@ -268,6 +282,7 @@ PathResult ChaseAlgorithm::query(VertexId source, VertexId target) const {
                 if (nd < mu && nd < my_dist.get(e.to)) {
                     my_dist.set(e.to, nd);
                     my_pq.push({nd, e.to});
+                    ++stats.heap_pushes;
                 }
             }
         };
@@ -286,7 +301,7 @@ PathResult ChaseAlgorithm::query(VertexId source, VertexId target) const {
         }
     }
 
-    return PathResult{mu, settled};
+    return PathResult{mu, stats};
 }
 
 } // namespace transport
