@@ -7,10 +7,21 @@
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
+#include <stdexcept>
 #include <string_view>
 #include <vector>
 
 namespace transport::test {
+
+template <typename Fn> bool expect_throws(Fn &&fn, std::string_view message) {
+    try {
+        fn();
+    } catch (const std::invalid_argument &) {
+        return true;
+    }
+    std::cerr << message << "\n";
+    return false;
+}
 
 inline Graph make_graph(uint32_t vertices, const std::vector<std::vector<Edge>> &rows) {
     Graph graph;

@@ -1,6 +1,7 @@
 #include "algorithms/partition.hpp"
 #include "graph/graph.hpp"
 #include "graph_fixtures.hpp"
+#include "routing_test_utils.hpp"
 
 #include <iostream>
 #include <span>
@@ -38,14 +39,9 @@ bool check_partition() {
     }
 
     // Inertial must throw on non-power-of-2 region count.
-    bool threw = false;
-    try {
-        (void)transport::build_partition(graph, uint16_t{3}, transport::PartitionMethod::Inertial, coords);
-    } catch (const std::invalid_argument &) {
-        threw = true;
-    }
-    if (!threw) {
-        std::cerr << "partition inertial: expected throw for regions=3 (not a power of 2)\n";
+    if (!transport::test::expect_throws(
+            [&] { (void)transport::build_partition(graph, uint16_t{3}, transport::PartitionMethod::Inertial, coords); },
+            "partition inertial: expected throw for regions=3 (not a power of 2)")) {
         return false;
     }
 
@@ -60,14 +56,8 @@ bool check_partition() {
     // Grid and inertial must throw when coordinates are missing or mismatched.
     for (const transport::PartitionMethod method :
          {transport::PartitionMethod::Grid, transport::PartitionMethod::Inertial}) {
-        bool coords_threw = false;
-        try {
-            (void)transport::build_partition(graph, uint16_t{4}, method);
-        } catch (const std::invalid_argument &) {
-            coords_threw = true;
-        }
-        if (!coords_threw) {
-            std::cerr << "partition: expected throw for missing coordinates\n";
+        if (!transport::test::expect_throws([&] { (void)transport::build_partition(graph, uint16_t{4}, method); },
+                                            "partition: expected throw for missing coordinates")) {
             return false;
         }
     }

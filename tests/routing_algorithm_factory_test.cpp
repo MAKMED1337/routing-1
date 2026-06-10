@@ -10,32 +10,21 @@
 namespace {
 
 using transport::test::check_all_pairs;
+using transport::test::expect_throws;
 
 bool check_partition_dependent_algorithms_require_coords() {
     const transport::Graph graph = transport::test::make_short_chain_graph();
 
     for (const std::string &algo :
          {std::string("astar"), std::string("bidi_astar"), std::string("arcflags"), std::string("chase")}) {
-        bool threw = false;
-        try {
-            (void)transport::make_routing_algorithm(algo, graph);
-        } catch (const std::invalid_argument &) {
-            threw = true;
-        }
-        if (!threw) {
-            std::cerr << "factory: expected '" << algo << "' to throw without coordinates\n";
+        if (!expect_throws([&] { (void)transport::make_routing_algorithm(algo, graph); },
+                           "factory: expected '" + algo + "' to throw without coordinates")) {
             return false;
         }
 
         const std::vector<transport::NodeCoord> wrong_size(graph.vertex_count() - 1);
-        threw = false;
-        try {
-            (void)transport::make_routing_algorithm(algo, graph, wrong_size);
-        } catch (const std::invalid_argument &) {
-            threw = true;
-        }
-        if (!threw) {
-            std::cerr << "factory: expected '" << algo << "' to throw with mismatched coordinates\n";
+        if (!expect_throws([&] { (void)transport::make_routing_algorithm(algo, graph, wrong_size); },
+                           "factory: expected '" + algo + "' to throw with mismatched coordinates")) {
             return false;
         }
     }
