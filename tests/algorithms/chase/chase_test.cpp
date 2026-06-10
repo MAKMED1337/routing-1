@@ -1,3 +1,4 @@
+#include "algorithms/ch/contraction_hierarchy.hpp"
 #include "algorithms/chase/chase.hpp"
 #include "graph_fixtures.hpp"
 
@@ -9,10 +10,12 @@ namespace {
 
 bool check_chase_validation() {
     const transport::Graph graph = transport::test::make_line_graph();
+    transport::ContractionHierarchyAlgorithm ch(graph);
+    ch.preprocess();
     bool ok = true;
     for (const double core_fraction : {0.0, -0.1, 1.1, std::numeric_limits<double>::quiet_NaN()}) {
         try {
-            transport::ChaseAlgorithm chase(graph, core_fraction, 4, transport::PartitionMethod::Grid, {});
+            transport::ChaseAlgorithm chase(graph, ch.get_ch(), core_fraction, 4, transport::PartitionMethod::Grid, {});
             chase.preprocess();
             std::cerr << "chase: expected std::invalid_argument for core_fraction=" << core_fraction << "\n";
             ok = false;

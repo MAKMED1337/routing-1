@@ -118,17 +118,6 @@ void build_upward_graph(const WorkGraph &work, const std::vector<uint32_t> &rank
     flatten_adjacency(backward, ch.backward_offsets, ch.backward_edges);
 }
 
-std::pair<ContractionHierarchy, PreprocessStats> build_contraction_hierarchy(const Graph &graph) {
-    WorkGraph work(graph);
-    WitnessSearch witness(graph.vertex_count());
-
-    ContractionHierarchy ch;
-    auto [rank, stats] = contract_graph(work, witness);
-    ch.rank = std::move(rank);
-    build_upward_graph(work, ch.rank, ch);
-    return {std::move(ch), stats};
-}
-
 // --- bidirectional upward query ---
 
 // Pops and relaxes one node from `pq` in its direction. `dist` is this direction's stamped distances,
@@ -177,6 +166,17 @@ std::span<const Edge> ContractionHierarchy::backward_adjacent_edges(VertexId ver
     return {backward_edges.data() + begin, end - begin};
 }
 
+ContractionHierarchyBuildResult build_contraction_hierarchy(const Graph &graph) {
+    WorkGraph work(graph);
+    WitnessSearch witness(graph.vertex_count());
+
+    ContractionHierarchy ch;
+    auto [rank, stats] = contract_graph(work, witness);
+    ch.rank = std::move(rank);
+    build_upward_graph(work, ch.rank, ch);
+    return {std::move(ch), stats};
+}
+
 ContractionHierarchyAlgorithm::ContractionHierarchyAlgorithm(const Graph &graph)
     : graph_(graph), forward_dist_(graph.vertex_count(), kUnreachable),
       backward_dist_(graph.vertex_count(), kUnreachable) {}
@@ -187,9 +187,9 @@ void ContractionHierarchyAlgorithm::preprocess() {
     if (preprocessed_) {
         return;
     }
-    auto [ch, stats] = build_contraction_hierarchy(graph_);
-    ch_ = std::move(ch);
-    last_stats_ = stats;
+    ContractionHierarchyBuildResult result = build_contraction_hierarchy(graph_);
+    ch_ = std::move(result.hierarchy);
+    last_stats_ = result.stats;
     preprocessed_ = true;
 }
 

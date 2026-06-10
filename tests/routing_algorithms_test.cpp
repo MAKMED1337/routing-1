@@ -41,24 +41,24 @@ bool check_all_algorithms(const transport::Graph &graph, std::span<const transpo
     bidijkstra.preprocess();
     ch.preprocess();
 
+    // Shared CH/PHAST built once and injected into every CH-dependent algorithm below.
+    const transport::PhastAlgorithm phast(ch.get_ch());
+
     // threads=1, threads=2, and threads=16 (more threads than work blocks on small graphs).
-    transport::ArcFlagsAlgorithm af1(graph, transport::PhastAlgorithm(ch.get_ch()), 4, transport::PartitionMethod::Grid,
-                                     1, coords);
-    transport::ArcFlagsAlgorithm af2(graph, transport::PhastAlgorithm(ch.get_ch()), 4, transport::PartitionMethod::Grid,
-                                     2, coords);
-    transport::ArcFlagsAlgorithm af16(graph, transport::PhastAlgorithm(ch.get_ch()), 4,
-                                      transport::PartitionMethod::Grid, 16, coords);
+    transport::ArcFlagsAlgorithm af1(graph, phast, 4, transport::PartitionMethod::Grid, 1, coords);
+    transport::ArcFlagsAlgorithm af2(graph, phast, 4, transport::PartitionMethod::Grid, 2, coords);
+    transport::ArcFlagsAlgorithm af16(graph, phast, 4, transport::PartitionMethod::Grid, 16, coords);
     af1.preprocess();
     af2.preprocess();
     af16.preprocess();
 
     // core_fraction=0.5 so even small graphs have a non-trivial core; Grid partition, 4 regions.
-    transport::ChaseAlgorithm chase(graph, 0.5, 4, transport::PartitionMethod::Grid, coords);
+    transport::ChaseAlgorithm chase(graph, ch.get_ch(), 0.5, 4, transport::PartitionMethod::Grid, coords);
     chase.preprocess();
 
     // full labels (label_fraction=1.0) and tiered labels (label_fraction=0.5).
-    transport::HubLabelsAlgorithm hl_full(graph, 1.0, 4ULL * 1024 * 1024 * 1024);
-    transport::HubLabelsAlgorithm hl_tiered(graph, 0.5, 4ULL * 1024 * 1024 * 1024);
+    transport::HubLabelsAlgorithm hl_full(graph, ch.get_ch(), 1.0, 4ULL * 1024 * 1024 * 1024);
+    transport::HubLabelsAlgorithm hl_tiered(graph, ch.get_ch(), 0.5, 4ULL * 1024 * 1024 * 1024);
     hl_full.preprocess();
     hl_tiered.preprocess();
 

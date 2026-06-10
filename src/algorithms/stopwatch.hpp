@@ -1,5 +1,7 @@
 #pragma once
 
+#include <sys/resource.h>
+
 #include <chrono>
 #include <ctime>
 
@@ -8,6 +10,15 @@ namespace transport {
 inline std::chrono::nanoseconds process_cpu_now() {
     using Ticks = std::chrono::duration<std::clock_t, std::ratio<1, CLOCKS_PER_SEC>>;
     return std::chrono::duration_cast<std::chrono::nanoseconds>(Ticks(std::clock()));
+}
+
+// Process-wide peak resident set size so far, in megabytes. ru_maxrss is a monotonic
+// high-water mark on Linux, so sampling it at successive phase boundaries yields the peak
+// RSS reached by the end of each phase.
+inline double peak_rss_mb() {
+    struct rusage usage{};
+    getrusage(RUSAGE_SELF, &usage);
+    return static_cast<double>(usage.ru_maxrss) / 1024.0;
 }
 
 struct Stopwatch {

@@ -1,6 +1,5 @@
 #include "algorithms/arcflags/arc_flags.hpp"
 
-#include "algorithms/ch/contraction_hierarchy.hpp"
 #include "algorithms/heap_node.hpp"
 #include "algorithms/partition.hpp"
 #include "algorithms/phast.hpp"
@@ -25,10 +24,11 @@ namespace {
 constexpr size_t kBatchSize = 8;
 } // namespace
 
-ArcFlagsAlgorithm::ArcFlagsAlgorithm(const Graph &graph, uint16_t regions, PartitionMethod partition_method,
-                                     uint32_t threads, std::span<const NodeCoord> coords)
-    : graph_(graph), regions_(regions), partition_method_(partition_method), threads_(threads), coords_(coords),
-      dist_(graph.vertex_count(), kUnreachable) {
+ArcFlagsAlgorithm::ArcFlagsAlgorithm(const Graph &graph, const PhastAlgorithm &phast, uint16_t regions,
+                                     PartitionMethod partition_method, uint32_t threads,
+                                     std::span<const NodeCoord> coords)
+    : graph_(graph), phast_(phast), regions_(regions), partition_method_(partition_method), threads_(threads),
+      coords_(coords), dist_(graph.vertex_count(), kUnreachable) {
     if (regions == 0 || regions > 64) {
         throw std::invalid_argument("arcflags: regions must be in [1, 64]");
     }
@@ -40,24 +40,11 @@ ArcFlagsAlgorithm::ArcFlagsAlgorithm(const Graph &graph, uint16_t regions, Parti
     }
 }
 
-ArcFlagsAlgorithm::ArcFlagsAlgorithm(const Graph &graph, const PhastAlgorithm &phast, uint16_t regions,
-                                     PartitionMethod partition_method, uint32_t threads,
-                                     std::span<const NodeCoord> coords)
-    : ArcFlagsAlgorithm(graph, regions, partition_method, threads, coords) {
-    phast_ = phast;
-}
-
 std::string_view ArcFlagsAlgorithm::name() const { return "arcflags"; }
 
 void ArcFlagsAlgorithm::preprocess() {
     if (preprocessed_) {
         return;
-    }
-
-    if (!phast_) {
-        ContractionHierarchyAlgorithm ch_algo(graph_);
-        ch_algo.preprocess();
-        phast_.emplace(ch_algo.get_ch());
     }
 
     const VertexId V = graph_.vertex_count();
@@ -137,7 +124,7 @@ void ArcFlagsAlgorithm::compute_flags(const std::vector<std::vector<VertexId>> &
             batch.assign(bvs.begin() + static_cast<ptrdiff_t>(bs),
                          bvs.begin() + static_cast<ptrdiff_t>(bs + batch_size));
 
-            phast_->all_to_one_batch(batch, dist);
+            phast_.all_to_one_batch(batch, dist);
             // dist[v * B + lane] = d(v, batch[lane])
             const size_t B = batch_size;
 
