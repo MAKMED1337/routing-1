@@ -3,6 +3,8 @@
 #include <chrono>
 #include <ctime>
 
+namespace transport {
+
 inline std::chrono::nanoseconds process_cpu_now() {
     using Ticks = std::chrono::duration<std::clock_t, std::ratio<1, CLOCKS_PER_SEC>>;
     return std::chrono::duration_cast<std::chrono::nanoseconds>(Ticks(std::clock()));
@@ -19,3 +21,5 @@ struct Stopwatch {
 };
 
 inline double to_seconds(std::chrono::nanoseconds d) { return std::chrono::duration<double>(d).count(); }
+
+} // namespace transport

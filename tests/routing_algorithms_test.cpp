@@ -98,8 +98,8 @@ bool check_all_algorithms(const transport::Graph &graph) {
     chase.preprocess();
 
     // full labels (label_fraction=1.0) and tiered labels (label_fraction=0.5).
-    transport::HubLabelsAlgorithm hl_full(graph, 1.0, 4ULL * 1024 * 1024 * 1024, 1);
-    transport::HubLabelsAlgorithm hl_tiered(graph, 0.5, 4ULL * 1024 * 1024 * 1024, 1);
+    transport::HubLabelsAlgorithm hl_full(graph, 1.0, 4ULL * 1024 * 1024 * 1024);
+    transport::HubLabelsAlgorithm hl_tiered(graph, 0.5, 4ULL * 1024 * 1024 * 1024);
     hl_full.preprocess();
     hl_tiered.preprocess();
 

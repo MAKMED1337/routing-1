@@ -11,7 +11,7 @@ bool check_hl_validation() {
     bool ok = true;
     for (double frac : {0.0, -0.1, 1.1}) {
         try {
-            transport::HubLabelsAlgorithm hl(graph, frac, 4ULL * 1024 * 1024 * 1024, 1);
+            transport::HubLabelsAlgorithm hl(graph, frac, 4ULL * 1024 * 1024 * 1024);
             hl.preprocess();
             std::cerr << "hl: expected std::invalid_argument for label_fraction=" << frac << "\n";
             ok = false;
@@ -23,7 +23,7 @@ bool check_hl_validation() {
 
 bool check_hl_query_before_preprocess_throws() {
     const transport::Graph graph = transport::test::make_line_graph();
-    transport::HubLabelsAlgorithm hl(graph, 1.0, 4ULL * 1024 * 1024 * 1024, 1);
+    transport::HubLabelsAlgorithm hl(graph, 1.0, 4ULL * 1024 * 1024 * 1024);
     try {
         (void)hl.query(0, 1);
     } catch (const std::logic_error &) {

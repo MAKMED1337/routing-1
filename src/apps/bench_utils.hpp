@@ -24,9 +24,10 @@
 namespace bench {
 
 using Json = nlohmann::ordered_json;
-using ::to_seconds;
 using transport::Graph;
 using transport::RoutingAlgorithm;
+using transport::Stopwatch;
+using transport::to_seconds;
 using transport::VertexId;
 
 struct BenchmarkArgs {

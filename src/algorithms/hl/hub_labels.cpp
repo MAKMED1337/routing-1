@@ -6,7 +6,6 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
-#include <queue>
 #include <span>
 #include <stdexcept>
 #include <string_view>
@@ -17,16 +16,13 @@ namespace transport {
 
 namespace {
 
-using Pq = std::priority_queue<HeapNode, std::vector<HeapNode>, std::greater<HeapNode>>;
-
 // a + b, saturating at kUnreachable instead of wrapping around.
 constexpr Distance saturating_add(Distance a, Distance b) { return a <= kUnreachable - b ? a + b : kUnreachable; }
 
 } // namespace
 
-HubLabelsAlgorithm::HubLabelsAlgorithm(const Graph &graph, double label_fraction, uint64_t memory_budget_bytes,
-                                       uint32_t threads)
-    : graph_(graph), label_fraction_(label_fraction), memory_budget_bytes_(memory_budget_bytes), threads_(threads) {
+HubLabelsAlgorithm::HubLabelsAlgorithm(const Graph &graph, double label_fraction, uint64_t memory_budget_bytes)
+    : graph_(graph), label_fraction_(label_fraction), memory_budget_bytes_(memory_budget_bytes) {
     if (label_fraction_ <= 0.0 || label_fraction_ > 1.0 || !std::isfinite(label_fraction_)) {
         throw std::invalid_argument("hl: label_fraction must be in (0, 1]");
     }
@@ -68,16 +64,13 @@ void HubLabelsAlgorithm::preprocess() {
     if (preprocessed_) {
         return;
     }
-    Stopwatch total_sw;
 
     if (!ch_provided_) {
         ContractionHierarchyAlgorithm ch_algo(graph_);
         ch_algo.preprocess();
         ch_ = ch_algo.get_ch();
-        stats_.ch_was_injected = false;
-    } else {
-        stats_.ch_was_injected = true;
     }
+    stats_.ch_was_injected = ch_provided_;
 
     const VertexId V = ch_.vertex_count();
     labeled_count_ = static_cast<VertexId>(static_cast<double>(V) * label_fraction_);
@@ -91,8 +84,6 @@ void HubLabelsAlgorithm::preprocess() {
 
     stats_.label_fraction = label_fraction_;
     stats_.labeled_vertices = static_cast<uint32_t>(labeled_count_);
-    stats_.label_build_wall_s = to_seconds(total_sw.wall_elapsed());
-    stats_.label_build_cpu_s = to_seconds(total_sw.cpu_elapsed());
     preprocessed_ = true;
 }
 
@@ -117,12 +108,16 @@ void HubLabelsAlgorithm::build_labels() {
     size_t max_fwd = 0;
     size_t max_bwd = 0;
 
+    // Scratch reused across build_half calls to avoid per-vertex reallocation.
+    std::unordered_map<VertexId, Distance> cand_map;
+    std::vector<HlEntry> sorted_cands;
+
     // Shared helper: builds one half-label for `vertex` over `out_edges` (the vertex's
     // upward arcs in one CH direction), propagating distances through already-built
     // `own_temp` labels and pruning against `other_temp`.
     auto build_half = [&](VertexId vertex, std::span<const Edge> out_edges, std::vector<std::vector<HlEntry>> &own_temp,
                           const std::vector<std::vector<HlEntry>> &other_temp) -> std::vector<HlEntry> & {
-        std::unordered_map<VertexId, Distance> cand_map;
+        cand_map.clear();
         cand_map[vertex] = Distance{0};
         for (const Edge &e : out_edges) {
             for (const HlEntry &he : own_temp[e.to]) {
@@ -133,7 +128,7 @@ void HubLabelsAlgorithm::build_labels() {
                 }
             }
         }
-        std::vector<HlEntry> sorted_cands;
+        sorted_cands.clear();
         sorted_cands.reserve(cand_map.size());
         for (const auto &[h, d] : cand_map) {
             sorted_cands.push_back({h, d});
@@ -151,6 +146,16 @@ void HubLabelsAlgorithm::build_labels() {
         }
         return label;
     };
+
+    // Fixed overhead for the memory-budget projection below; independent of the loop
+    // iteration, so computed once. Covers CH arcs + graph edges + per-vertex: temp
+    // vector headers (2×24), inv_rank (8), fwd/bwd scratch (2×8), fwd/bwd offsets (2×8).
+    const uint64_t fixed_bytes = (ch_.forward_edges.size() + ch_.backward_edges.size()) * sizeof(Edge) +
+                                 (ch_.forward_offsets.size() + ch_.backward_offsets.size()) * sizeof(uint64_t) +
+                                 ch_.rank.size() * sizeof(uint32_t) + graph_.edges.size() * sizeof(Edge) +
+                                 graph_.offsets.size() * sizeof(size_t) +
+                                 static_cast<uint64_t>(V) * (2 * sizeof(std::vector<HlEntry>) + sizeof(VertexId) +
+                                                             2 * sizeof(Distance) + 2 * sizeof(size_t));
 
     // Process labeled vertices in descending rank order.
     for (VertexId rank = V; rank-- > label_threshold_;) {
@@ -172,15 +177,6 @@ void HubLabelsAlgorithm::build_labels() {
             const uint64_t bytes_so_far = (total_fwd_entries + total_bwd_entries) * sizeof(HlEntry);
             const uint64_t projected_label_bytes =
                 bytes_so_far * static_cast<uint64_t>(labeled_count_) / static_cast<uint64_t>(processed);
-            // Fixed overhead: CH arcs + graph edges + per-vertex: temp vector headers (2×24),
-            // inv_rank (8), fwd/bwd scratch (2×8), fwd/bwd offsets being built (2×8).
-            const uint64_t fixed_bytes =
-                (ch_.forward_edges.size() + ch_.backward_edges.size()) * sizeof(Edge) +
-                (ch_.forward_offsets.size() + ch_.backward_offsets.size()) * sizeof(uint64_t) +
-                ch_.rank.size() * sizeof(uint32_t) + graph_.edges.size() * sizeof(Edge) +
-                graph_.offsets.size() * sizeof(size_t) +
-                static_cast<uint64_t>(V) *
-                    (2 * sizeof(std::vector<HlEntry>) + sizeof(VertexId) + 2 * sizeof(Distance) + 2 * sizeof(size_t));
             const uint64_t projected_peak = 2 * projected_label_bytes + fixed_bytes;
             if (projected_peak > memory_budget_bytes_) {
                 throw std::runtime_error("hl: projected peak memory " +
@@ -226,49 +222,47 @@ void HubLabelsAlgorithm::build_labels() {
 
 // ----- collect (shared upward-search helper) -----
 
-uint32_t HubLabelsAlgorithm::collect(VertexId start,
-                                     std::span<const Edge> (ContractionHierarchy::*adjacent_edges)(VertexId) const,
-                                     std::span<const HlEntry> (HubLabelsAlgorithm::*label)(VertexId) const,
-                                     StampedVector<Distance> &scratch, std::vector<HlEntry> &out,
-                                     std::vector<VertexId> &unlabeled_settled) const {
-    std::unordered_map<VertexId, Distance> hub_best;
-    hub_best.reserve(256);
+uint32_t HubLabelsAlgorithm::collect(VertexId start, bool forward, std::vector<VertexId> *unlabeled) const {
+    StampedVector<Distance> &scratch = forward ? fwd_scratch_ : bwd_scratch_;
+    std::vector<HlEntry> &out = forward ? collect_buf_fwd_ : collect_buf_bwd_;
 
-    Pq pq;
+    hub_best_.clear();
     scratch.set(start, Distance{0});
-    pq.push({Distance{0}, start});
+    pq_.push({Distance{0}, start});
 
     uint32_t settled = 0;
-    while (!pq.empty()) {
-        const HeapNode top = pq.top();
-        pq.pop();
+    while (!pq_.empty()) {
+        const HeapNode top = pq_.top();
+        pq_.pop();
         if (top.key != scratch.get(top.v)) {
             continue;
         }
         ++settled;
         if (is_labeled(top.v)) {
-            for (const HlEntry &e : (this->*label)(top.v)) {
+            for (const HlEntry &e : (forward ? fwd_label(top.v) : bwd_label(top.v))) {
                 const Distance nd = saturating_add(top.key, e.dist);
-                auto [it, inserted] = hub_best.emplace(e.hub, nd);
+                auto [it, inserted] = hub_best_.emplace(e.hub, nd);
                 if (!inserted && nd < it->second) {
                     it->second = nd;
                 }
             }
             continue;
         }
-        unlabeled_settled.push_back(top.v);
-        for (const Edge &e : (ch_.*adjacent_edges)(top.v)) {
+        if (unlabeled != nullptr) {
+            unlabeled->push_back(top.v);
+        }
+        for (const Edge &e : (forward ? ch_.forward_adjacent_edges(top.v) : ch_.backward_adjacent_edges(top.v))) {
             const Distance nd = saturating_add(top.key, e.weight);
             if (nd < scratch.get(e.to)) {
                 scratch.set(e.to, nd);
-                pq.push({nd, e.to});
+                pq_.push({nd, e.to});
             }
         }
     }
 
     out.clear();
-    out.reserve(hub_best.size());
-    for (const auto &[h, d] : hub_best) {
+    out.reserve(hub_best_.size());
+    for (const auto &[h, d] : hub_best_) {
         out.push_back({h, d});
     }
     std::sort(out.begin(), out.end());
@@ -284,55 +278,49 @@ PathResult HubLabelsAlgorithm::query(VertexId source, VertexId target) const {
 
     const bool s_lab = is_labeled(source);
     const bool t_lab = is_labeled(target);
-    Distance dist = kUnreachable;
+    const bool both_unlabeled = !s_lab && !t_lab;
     uint32_t settled = 0;
 
-    if (s_lab && t_lab) {
-        dist = intersect_labels(fwd_label(source), bwd_label(target));
-    } else if (s_lab) {
-        // source labeled, target unlabeled
-        bwd_scratch_.reset();
-        std::vector<VertexId> dummy;
-        settled = collect(target, &ContractionHierarchy::backward_adjacent_edges, &HubLabelsAlgorithm::bwd_label,
-                          bwd_scratch_, collect_buf_bwd_, dummy);
-        bwd_scratch_.reset();
-        dist = intersect_labels(fwd_label(source), collect_buf_bwd_);
-    } else if (t_lab) {
-        // source unlabeled, target labeled
-        fwd_scratch_.reset();
-        std::vector<VertexId> dummy;
-        settled = collect(source, &ContractionHierarchy::forward_adjacent_edges, &HubLabelsAlgorithm::fwd_label,
-                          fwd_scratch_, collect_buf_fwd_, dummy);
-        fwd_scratch_.reset();
-        dist = intersect_labels(collect_buf_fwd_, bwd_label(target));
+    // Forward side: source's stored hub label, or an upward search from source.
+    // Record settled unlabeled vertices only when the mu_low fallback below needs them.
+    std::span<const HlEntry> fwd_side;
+    if (s_lab) {
+        fwd_side = fwd_label(source);
     } else {
-        // Both unlabeled: collect + mu_low from bidi CH below threshold.
         fwd_scratch_.reset();
+        unlabeled_settled_.clear();
+        settled += collect(source, /*forward=*/true, both_unlabeled ? &unlabeled_settled_ : nullptr);
+        fwd_side = collect_buf_fwd_;
+    }
+
+    // Backward side: target's stored hub label, or an upward search from target.
+    std::span<const HlEntry> bwd_side;
+    if (t_lab) {
+        bwd_side = bwd_label(target);
+    } else {
         bwd_scratch_.reset();
+        settled += collect(target, /*forward=*/false, nullptr);
+        bwd_side = collect_buf_bwd_;
+    }
 
-        std::vector<VertexId> fwd_unlabeled;
-        std::vector<VertexId> bwd_unlabeled;
-        const uint32_t fwd_settled =
-            collect(source, &ContractionHierarchy::forward_adjacent_edges, &HubLabelsAlgorithm::fwd_label, fwd_scratch_,
-                    collect_buf_fwd_, fwd_unlabeled);
-        const uint32_t bwd_settled =
-            collect(target, &ContractionHierarchy::backward_adjacent_edges, &HubLabelsAlgorithm::bwd_label,
-                    bwd_scratch_, collect_buf_bwd_, bwd_unlabeled);
-        settled = fwd_settled + bwd_settled;
+    Distance dist = intersect_labels(fwd_side, bwd_side);
 
-        // mu_low: min dist_fwd[v] + dist_bwd[v] over fwd-settled unlabeled vertices.
-        Distance mu_low = kUnreachable;
-        for (const VertexId v : fwd_unlabeled) {
+    // When both endpoints are unlabeled the apex may lie below the labeled tier; mu_low
+    // captures those paths via the overlap of the two bidirectional CH searches.
+    if (both_unlabeled) {
+        for (const VertexId v : unlabeled_settled_) {
             const Distance db = bwd_scratch_.get(v);
             if (db != kUnreachable) {
-                mu_low = std::min(mu_low, saturating_add(fwd_scratch_.get(v), db));
+                dist = std::min(dist, saturating_add(fwd_scratch_.get(v), db));
             }
         }
+    }
 
+    if (!s_lab) {
         fwd_scratch_.reset();
+    }
+    if (!t_lab) {
         bwd_scratch_.reset();
-
-        dist = std::min(mu_low, intersect_labels(collect_buf_fwd_, collect_buf_bwd_));
     }
 
     return {dist, settled};
