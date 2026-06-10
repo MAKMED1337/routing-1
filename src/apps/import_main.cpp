@@ -1,5 +1,7 @@
 #include "graph/graph_io.hpp"
 
+#include <CLI/CLI.hpp>
+
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -27,19 +29,6 @@ using transport::Graph;
 using transport::NodeCoord;
 
 namespace {
-
-void print_usage() {
-    std::cerr << "usage: transport_import_osm --input <europe.osm.pbf> --output <graph.bin> --stats "
-                 "<stats.json> [--coords-output <coords.bin>]\n";
-}
-
-std::string require_value(int argc, char **argv, int &i, std::string_view key) {
-    if (i + 1 >= argc) {
-        throw std::invalid_argument("missing value for " + std::string(key));
-    }
-    ++i;
-    return argv[i];
-}
 
 struct RawSegment {
     uint64_t from_osm_id = 0;
@@ -429,30 +418,17 @@ int main(int argc, char **argv) {
     std::string output;
     std::string stats;
     std::string coords_output;
-    try {
-        for (int i = 1; i < argc; ++i) {
-            const std::string key = argv[i];
-            if (key == "--input") {
-                input = require_value(argc, argv, i, key);
-            } else if (key == "--output") {
-                output = require_value(argc, argv, i, key);
-            } else if (key == "--stats") {
-                stats = require_value(argc, argv, i, key);
-            } else if (key == "--coords-output") {
-                coords_output = require_value(argc, argv, i, key);
-            } else {
-                throw std::invalid_argument("unknown argument: " + key);
-            }
-        }
-    } catch (const std::exception &err) {
-        std::cerr << err.what() << "\n";
-        print_usage();
-        return 1;
-    }
 
-    if (input.empty() || output.empty() || stats.empty()) {
-        print_usage();
-        return 1;
+    CLI::App app{"Import a driving OSM PBF into the binary graph format"};
+    app.add_option("--input", input, "Input OSM PBF file")->required()->check(CLI::ExistingFile);
+    app.add_option("--output", output, "Output graph binary")->required();
+    app.add_option("--stats", stats, "Output import stats JSON")->required();
+    app.add_option("--coords-output", coords_output, "Optional output coordinates binary");
+
+    try {
+        app.parse(argc, argv);
+    } catch (const CLI::ParseError &err) {
+        return app.exit(err);
     }
 
     const auto t0 = std::chrono::steady_clock::now();

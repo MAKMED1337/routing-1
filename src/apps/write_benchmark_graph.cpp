@@ -1,5 +1,7 @@
 #include "graph/graph_io.hpp"
 
+#include <CLI/CLI.hpp>
+
 #include <cmath>
 #include <cstdint>
 #include <iostream>
@@ -66,17 +68,25 @@ GridGraph make_grid_graph(uint32_t width, uint32_t height) {
 } // namespace
 
 int main(int argc, char **argv) {
-    if (argc != 2 && argc != 3) {
-        std::cerr << "usage: write_benchmark_graph <output.graph> [coords.bin]\n";
-        return 1;
+    std::string graph_output;
+    std::string coords_output;
+
+    CLI::App app{"Write a synthetic benchmark grid graph"};
+    app.add_option("output_graph", graph_output, "Output graph binary")->required();
+    app.add_option("coords_output", coords_output, "Optional output coordinates binary");
+
+    try {
+        app.parse(argc, argv);
+    } catch (const CLI::ParseError &err) {
+        return app.exit(err);
     }
 
     const GridGraph grid = make_grid_graph(30, 30);
-    if (!transport::save_graph_binary(grid.graph, argv[1])) {
+    if (!transport::save_graph_binary(grid.graph, graph_output)) {
         std::cerr << "failed to save graph\n";
         return 1;
     }
-    if (argc == 3 && !transport::save_coords_binary(grid.coords, argv[2])) {
+    if (!coords_output.empty() && !transport::save_coords_binary(grid.coords, coords_output)) {
         std::cerr << "failed to save coordinates\n";
         return 1;
     }

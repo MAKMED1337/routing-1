@@ -25,7 +25,13 @@ FetchContent_Declare(
   GIT_TAG v3.11.3
   GIT_SHALLOW TRUE
 )
-FetchContent_MakeAvailable(protozero libosmium nlohmann_json)
+FetchContent_Declare(
+  cli11
+  GIT_REPOSITORY https://github.com/CLIUtils/CLI11.git
+  GIT_TAG v2.4.2
+  GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(protozero libosmium nlohmann_json cli11)
 
 find_package(Threads REQUIRED)
 find_package(ZLIB REQUIRED)
@@ -77,13 +83,13 @@ endif()
 
 add_executable(transport_import_osm src/apps/import_main.cpp)
 target_include_directories(transport_import_osm SYSTEM PRIVATE ${libosmium_SOURCE_DIR}/include ${protozero_SOURCE_DIR}/include)
-target_link_libraries(transport_import_osm PRIVATE transport_core project_warnings ZLIB::ZLIB BZip2::BZip2 EXPAT::EXPAT)
+target_link_libraries(transport_import_osm PRIVATE transport_core CLI11::CLI11 project_warnings ZLIB::ZLIB BZip2::BZip2 EXPAT::EXPAT)
 
 add_executable(transport_query src/apps/query_main.cpp)
-target_link_libraries(transport_query PRIVATE transport_core project_warnings)
+target_link_libraries(transport_query PRIVATE transport_core CLI11::CLI11 project_warnings)
 
 add_executable(transport_benchmark src/apps/benchmark_main.cpp)
-target_link_libraries(transport_benchmark PRIVATE transport_core project_warnings)
+target_link_libraries(transport_benchmark PRIVATE transport_core CLI11::CLI11 project_warnings)
 
 if(BUILD_TESTING)
   add_executable(graph_io_tests tests/graph_io_test.cpp)
@@ -116,19 +122,23 @@ if(BUILD_TESTING)
 endif()
 
 add_executable(write_benchmark_graph src/apps/write_benchmark_graph.cpp)
-target_link_libraries(write_benchmark_graph PRIVATE transport_core project_warnings)
+target_link_libraries(write_benchmark_graph PRIVATE transport_core CLI11::CLI11 project_warnings)
 
 # Shared interface for all benchmark binaries: nlohmann/json.
 add_library(bench_harness INTERFACE)
 target_link_libraries(bench_harness INTERFACE transport_core nlohmann_json::nlohmann_json project_warnings)
 
 add_executable(ch_measure src/apps/ch_measure_main.cpp)
-target_link_libraries(ch_measure PRIVATE bench_harness)
+target_link_libraries(ch_measure PRIVATE bench_harness CLI11::CLI11)
 
 if(BUILD_TESTING)
   add_test(NAME graph_io COMMAND graph_io_tests)
   add_test(NAME reverse_graph COMMAND reverse_graph_tests)
   add_test(NAME query_help COMMAND transport_query --help)
+  add_test(NAME import_help COMMAND transport_import_osm --help)
+  add_test(NAME benchmark_help COMMAND transport_benchmark --help)
+  add_test(NAME write_benchmark_graph_help COMMAND write_benchmark_graph --help)
+  add_test(NAME ch_measure_help COMMAND ch_measure --help)
   add_test(NAME routing_algorithms COMMAND transport_routing_tests)
   add_test(NAME routing_instance COMMAND routing_instance_tests)
   add_test(NAME alt COMMAND alt_tests)

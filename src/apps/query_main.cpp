@@ -2,86 +2,31 @@
 #include "graph/graph_io.hpp"
 #include "routing/routing.hpp"
 
-#include <cstdint>
+#include <CLI/CLI.hpp>
+
 #include <iostream>
-#include <limits>
 #include <optional>
-#include <stdexcept>
 #include <string>
-#include <string_view>
 #include <vector>
 
-namespace {
-
-void print_usage() {
-    std::cout << "usage: transport_query --graph <graph.bin> --source <id> --target <id> --algorithm "
-                 "dijkstra|astar|alt|bidijkstra|bidi_astar|ch|arcflags|chase|hl [--coords <coords.bin>]\n";
-}
-
-std::string require_value(int argc, char **argv, int &i, std::string_view key) {
-    if (i + 1 >= argc) {
-        throw std::invalid_argument("missing value for " + std::string(key));
-    }
-    ++i;
-    return argv[i];
-}
-
-transport::VertexId parse_vertex_id(std::string_view text, std::string_view key) {
-    size_t consumed = 0;
-    const std::string value(text);
-    if (value.empty() || value.front() == '-') {
-        throw std::invalid_argument("invalid integer for " + std::string(key) + ": " + value);
-    }
-    const unsigned long long parsed = std::stoull(value, &consumed);
-    if (consumed != value.size()) {
-        throw std::invalid_argument("invalid integer for " + std::string(key) + ": " + value);
-    }
-    if (parsed > std::numeric_limits<transport::VertexId>::max()) {
-        throw std::invalid_argument("value too large for " + std::string(key) + ": " + value);
-    }
-    return static_cast<transport::VertexId>(parsed);
-}
-
-} // namespace
-
 int main(int argc, char **argv) {
-    if (argc == 2 && std::string(argv[1]) == "--help") {
-        print_usage();
-        return 0;
-    }
-
     std::string graph_path;
     std::string coords_path;
     transport::VertexId source = 0;
     transport::VertexId target = 0;
     std::string algo = "dijkstra";
 
-    try {
-        for (int i = 1; i < argc; ++i) {
-            const std::string key = argv[i];
-            if (key == "--graph") {
-                graph_path = require_value(argc, argv, i, key);
-            } else if (key == "--coords") {
-                coords_path = require_value(argc, argv, i, key);
-            } else if (key == "--source") {
-                source = parse_vertex_id(require_value(argc, argv, i, key), key);
-            } else if (key == "--target") {
-                target = parse_vertex_id(require_value(argc, argv, i, key), key);
-            } else if (key == "--algorithm") {
-                algo = require_value(argc, argv, i, key);
-            } else {
-                throw std::invalid_argument("unknown argument: " + key);
-            }
-        }
-    } catch (const std::exception &err) {
-        std::cerr << err.what() << "\n";
-        print_usage();
-        return 1;
-    }
+    CLI::App app{"Run a shortest-path query against a binary graph"};
+    app.add_option("--graph", graph_path, "Path to graph binary")->required()->check(CLI::ExistingFile);
+    app.add_option("--coords", coords_path, "Path to coordinates binary")->check(CLI::ExistingFile);
+    app.add_option("--source", source, "Source vertex id")->required();
+    app.add_option("--target", target, "Target vertex id")->required();
+    app.add_option("--algorithm", algo, "Routing algorithm name")->default_val("dijkstra");
 
-    if (graph_path.empty()) {
-        std::cerr << "missing --graph\n";
-        return 1;
+    try {
+        app.parse(argc, argv);
+    } catch (const CLI::ParseError &err) {
+        return app.exit(err);
     }
 
     const transport::Graph graph = transport::load_graph_binary(graph_path);
