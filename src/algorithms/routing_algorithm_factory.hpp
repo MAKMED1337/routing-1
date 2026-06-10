@@ -1,6 +1,7 @@
 #pragma once
 
 #include "algorithms/routing_algorithm.hpp"
+#include "graph/geometry.hpp"
 #include "graph/graph.hpp"
 
 #include <memory>

@@ -1,6 +1,6 @@
 #include "algorithms/routing_algorithm.hpp"
 #include "algorithms/routing_algorithm_factory.hpp"
-#include "graph/graph.hpp"
+#include "graph/graph_io.hpp"
 #include "routing/routing.hpp"
 
 #include <cstdint>

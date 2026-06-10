@@ -53,7 +53,9 @@ add_library(transport_core
   src/algorithms/dijkstra.cpp
   src/algorithms/partition.cpp
   src/algorithms/phast.cpp
+  src/graph/geometry.cpp
   src/graph/graph.cpp
+  src/graph/graph_io.cpp
   src/graph/reverse_graph.cpp
   src/algorithms/routing_algorithm_factory.cpp
   src/algorithms/shortest_paths.cpp

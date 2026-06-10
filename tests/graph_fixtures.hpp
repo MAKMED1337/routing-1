@@ -1,5 +1,6 @@
 #pragma once
 
+#include "graph/geometry.hpp"
 #include "graph/graph.hpp"
 #include "routing_test_utils.hpp"
 

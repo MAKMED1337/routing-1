@@ -7,7 +7,7 @@
 #include "algorithms/chase/chase.hpp"
 #include "algorithms/hl/hub_labels.hpp"
 #include "algorithms/phast.hpp"
-#include "graph/graph.hpp"
+#include "graph/graph_io.hpp"
 #include "graph/reverse_graph.hpp"
 #include "graph_fixtures.hpp"
 #include "routing_test_utils.hpp"

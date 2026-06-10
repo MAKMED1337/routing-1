@@ -4,6 +4,7 @@
 #include "algorithms/phast.hpp"
 #include "algorithms/routing_algorithm.hpp"
 #include "algorithms/stamped_vector.hpp"
+#include "graph/geometry.hpp"
 #include "graph/graph.hpp"
 #include "graph/types.hpp"
 
