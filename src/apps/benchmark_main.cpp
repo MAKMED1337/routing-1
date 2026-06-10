@@ -72,8 +72,6 @@ struct QueryAggregateInput {
     std::vector<uint64_t> heap_pushes;
     std::vector<uint64_t> heuristic_evals;
     std::vector<uint64_t> pruned_by_flag;
-    std::vector<uint64_t> table_lookups;
-    uint64_t fallback_count = 0;
 };
 
 template <typename T> double mean_of(const std::vector<T> &v) {
@@ -107,8 +105,6 @@ bench::Json aggregate_to_json(QueryAggregateInput &agg) {
     j["mean_heap_pushes"] = mean_of(agg.heap_pushes);
     j["mean_heuristic_evals"] = mean_of(agg.heuristic_evals);
     j["mean_pruned_by_flag"] = mean_of(agg.pruned_by_flag);
-    j["mean_table_lookups"] = mean_of(agg.table_lookups);
-    j["fallback_count"] = agg.fallback_count;
     return j;
 }
 
@@ -222,10 +218,6 @@ int main(int argc, char **argv) {
         agg_a.heap_pushes.push_back(a.path.stats.heap_pushes);
         agg_a.heuristic_evals.push_back(a.path.stats.heuristic_evals);
         agg_a.pruned_by_flag.push_back(a.path.stats.pruned_by_flag);
-        agg_a.table_lookups.push_back(a.path.stats.table_lookups);
-        if (a.path.stats.used_fallback) {
-            ++agg_a.fallback_count;
-        }
 
         agg_b.query_us.push_back(b.query_us);
         agg_b.settled.push_back(b.path.stats.settled);
@@ -233,10 +225,6 @@ int main(int argc, char **argv) {
         agg_b.heap_pushes.push_back(b.path.stats.heap_pushes);
         agg_b.heuristic_evals.push_back(b.path.stats.heuristic_evals);
         agg_b.pruned_by_flag.push_back(b.path.stats.pruned_by_flag);
-        agg_b.table_lookups.push_back(b.path.stats.table_lookups);
-        if (b.path.stats.used_fallback) {
-            ++agg_b.fallback_count;
-        }
 
         ++accepted;
     }

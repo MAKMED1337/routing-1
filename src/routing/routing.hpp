@@ -16,8 +16,6 @@ struct QueryStats {
     uint64_t heap_pushes = 0;
     uint64_t heuristic_evals = 0;
     uint64_t pruned_by_flag = 0;
-    uint64_t table_lookups = 0;
-    bool used_fallback = false;
 };
 
 struct PathResult {

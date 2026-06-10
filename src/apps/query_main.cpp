@@ -62,7 +62,5 @@ int main(int argc, char **argv) {
     std::cout << "settled_forward=" << result.stats.settled_forward << "\n";
     std::cout << "settled_backward=" << result.stats.settled_backward << "\n";
     std::cout << "pruned_by_flag=" << result.stats.pruned_by_flag << "\n";
-    std::cout << "table_lookups=" << result.stats.table_lookups << "\n";
-    std::cout << "used_fallback=" << static_cast<int>(result.stats.used_fallback) << "\n";
     return 0;
 }
