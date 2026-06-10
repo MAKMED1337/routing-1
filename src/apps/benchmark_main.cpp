@@ -60,15 +60,15 @@ TimedResult query_timed(const RoutingAlgorithm &algorithm, VertexId source, Vert
 
 bench::Json preprocess_to_json(const PreprocessReport &report, const RoutingAlgorithm &algorithm) {
     bench::Json j;
-    j["dependency_wall_s"] = report.dependency.wall_s;
-    j["dependency_cpu_s"] = report.dependency.cpu_s;
+    j["dependency_wall_s"] = to_seconds(report.dependency.wall);
+    j["dependency_cpu_s"] = to_seconds(report.dependency.cpu);
     j["after_dependency_peak_rss_mb"] = report.dependency.process_peak_rss_mb;
     if (report.dependency.ch) {
         j["dependency_ch_ordering_init_s"] = to_seconds(report.dependency.ch->ordering_init_ns);
         j["dependency_ch_witness_calls"] = report.dependency.ch->witness_calls;
     }
-    j["algorithm_wall_s"] = report.algorithm.wall_s;
-    j["algorithm_cpu_s"] = report.algorithm.cpu_s;
+    j["algorithm_wall_s"] = to_seconds(report.algorithm.wall);
+    j["algorithm_cpu_s"] = to_seconds(report.algorithm.cpu);
     j["after_algorithm_peak_rss_mb"] = report.algorithm.process_peak_rss_mb;
     if (const auto *ch = dynamic_cast<const ContractionHierarchyAlgorithm *>(&algorithm)) {
         j["auxiliary_edges"] = ch->auxiliary_edge_count();
