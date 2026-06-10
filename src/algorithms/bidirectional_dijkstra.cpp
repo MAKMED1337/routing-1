@@ -5,11 +5,8 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <functional>
-#include <queue>
 #include <stdexcept>
 #include <string_view>
-#include <vector>
 
 namespace transport {
 
@@ -29,8 +26,8 @@ PathResult BidirectionalDijkstraAlgorithm::query(VertexId source, VertexId targe
     forward_dist_.reset();
     backward_dist_.reset();
 
-    std::priority_queue<HeapNode, std::vector<HeapNode>, std::greater<>> forward_pq;
-    std::priority_queue<HeapNode, std::vector<HeapNode>, std::greater<>> backward_pq;
+    HeapQueue forward_pq;
+    HeapQueue backward_pq;
 
     forward_dist_.set(source, 0);
     backward_dist_.set(target, 0);
@@ -46,10 +43,8 @@ PathResult BidirectionalDijkstraAlgorithm::query(VertexId source, VertexId targe
         }
     };
 
-    auto settle_next = [&settled,
-                        &update_best](std::priority_queue<HeapNode, std::vector<HeapNode>, std::greater<>> &pq,
-                                      const Graph &search_graph, StampedVector<Distance> &dist,
-                                      const StampedVector<Distance> &opposite_dist) {
+    auto settle_next = [&settled, &update_best](HeapQueue &pq, const Graph &search_graph, StampedVector<Distance> &dist,
+                                                const StampedVector<Distance> &opposite_dist) {
         const HeapNode top = pq.top();
         pq.pop();
         if (top.key != dist.get(top.v)) {
