@@ -19,6 +19,9 @@ namespace {
 
 using Pq = std::priority_queue<HeapNode, std::vector<HeapNode>, std::greater<HeapNode>>;
 
+// a + b, saturating at kUnreachable instead of wrapping around.
+constexpr Distance saturating_add(Distance a, Distance b) { return a <= kUnreachable - b ? a + b : kUnreachable; }
+
 } // namespace
 
 HubLabelsAlgorithm::HubLabelsAlgorithm(const Graph &graph, double label_fraction, uint64_t memory_budget_bytes,
@@ -47,8 +50,7 @@ Distance HubLabelsAlgorithm::intersect_labels(std::span<const HlEntry> f, std::s
     size_t j = 0;
     while (i < f.size() && j < b.size()) {
         if (f[i].hub == b[j].hub) {
-            const Distance d = f[i].dist <= kUnreachable - b[j].dist ? f[i].dist + b[j].dist : kUnreachable;
-            best = std::min(best, d);
+            best = std::min(best, saturating_add(f[i].dist, b[j].dist));
             ++i;
             ++j;
         } else if (f[i].hub < b[j].hub) {
@@ -79,12 +81,7 @@ void HubLabelsAlgorithm::preprocess() {
 
     const VertexId V = ch_.vertex_count();
     labeled_count_ = static_cast<VertexId>(static_cast<double>(V) * label_fraction_);
-    if (labeled_count_ == 0) {
-        labeled_count_ = 1; // at least the apex
-    }
-    if (labeled_count_ > V) {
-        labeled_count_ = V;
-    }
+    labeled_count_ = std::clamp(labeled_count_, VertexId{1}, V); // at least the apex
     label_threshold_ = V - labeled_count_;
 
     fwd_scratch_ = StampedVector<Distance>(V, kUnreachable);
@@ -120,30 +117,24 @@ void HubLabelsAlgorithm::build_labels() {
     size_t max_fwd = 0;
     size_t max_bwd = 0;
 
-    // Scratch for candidate gathering (reused across vertices).
-    std::unordered_map<VertexId, Distance> cand_map;
-    cand_map.reserve(512);
-    std::vector<HlEntry> sorted_cands;
-    sorted_cands.reserve(512);
-
-    // Shared helper: builds one half-label for `vertex` from `offsets`/`edges`, propagating
-    // distances through already-built `own_temp` labels and pruning against `other_temp`.
-    auto build_half = [&](VertexId vertex, const std::vector<uint64_t> &offsets, const std::vector<Edge> &edges,
-                          std::vector<std::vector<HlEntry>> &own_temp,
+    // Shared helper: builds one half-label for `vertex` over `out_edges` (the vertex's
+    // upward arcs in one CH direction), propagating distances through already-built
+    // `own_temp` labels and pruning against `other_temp`.
+    auto build_half = [&](VertexId vertex, std::span<const Edge> out_edges, std::vector<std::vector<HlEntry>> &own_temp,
                           const std::vector<std::vector<HlEntry>> &other_temp) -> std::vector<HlEntry> & {
-        cand_map.clear();
+        std::unordered_map<VertexId, Distance> cand_map;
         cand_map[vertex] = Distance{0};
-        for (const Edge &e : std::span(edges).subspan(static_cast<size_t>(offsets[vertex]),
-                                                      static_cast<size_t>(offsets[vertex + 1] - offsets[vertex]))) {
+        for (const Edge &e : out_edges) {
             for (const HlEntry &he : own_temp[e.to]) {
-                const Distance nd = he.dist <= kUnreachable - e.weight ? he.dist + e.weight : kUnreachable;
+                const Distance nd = saturating_add(he.dist, e.weight);
                 auto [it, inserted] = cand_map.emplace(he.hub, nd);
                 if (!inserted && nd < it->second) {
                     it->second = nd;
                 }
             }
         }
-        sorted_cands.clear();
+        std::vector<HlEntry> sorted_cands;
+        sorted_cands.reserve(cand_map.size());
         for (const auto &[h, d] : cand_map) {
             sorted_cands.push_back({h, d});
         }
@@ -165,8 +156,8 @@ void HubLabelsAlgorithm::build_labels() {
     for (VertexId rank = V; rank-- > label_threshold_;) {
         const VertexId v = inv_rank[rank];
 
-        const std::vector<HlEntry> &lf = build_half(v, ch_.forward_offsets, ch_.forward_edges, temp_fwd, temp_bwd);
-        const std::vector<HlEntry> &lb = build_half(v, ch_.backward_offsets, ch_.backward_edges, temp_bwd, temp_fwd);
+        const std::vector<HlEntry> &lf = build_half(v, ch_.forward_adjacent_edges(v), temp_fwd, temp_bwd);
+        const std::vector<HlEntry> &lb = build_half(v, ch_.backward_adjacent_edges(v), temp_bwd, temp_fwd);
 
         total_fwd_entries += lf.size();
         total_bwd_entries += lb.size();
@@ -189,7 +180,7 @@ void HubLabelsAlgorithm::build_labels() {
                 ch_.rank.size() * sizeof(uint32_t) + graph_.edges.size() * sizeof(Edge) +
                 graph_.offsets.size() * sizeof(size_t) +
                 static_cast<uint64_t>(V) *
-                    (2 * sizeof(std::vector<HlEntry>) + sizeof(VertexId) + 2 * sizeof(Distance) + 2 * sizeof(uint64_t));
+                    (2 * sizeof(std::vector<HlEntry>) + sizeof(VertexId) + 2 * sizeof(Distance) + 2 * sizeof(size_t));
             const uint64_t projected_peak = 2 * projected_label_bytes + fixed_bytes;
             if (projected_peak > memory_budget_bytes_) {
                 throw std::runtime_error("hl: projected peak memory " +
@@ -219,7 +210,7 @@ void HubLabelsAlgorithm::build_labels() {
         temp_bwd[v] = std::vector<HlEntry>{};
     }
 
-    const double label_bytes = static_cast<double>((total_fwd_entries + total_bwd_entries) * sizeof(HlEntry));
+    const uint64_t total_label_bytes = (total_fwd_entries + total_bwd_entries) * sizeof(HlEntry);
 
     stats_.label_build_wall_s = to_seconds(sw.wall_elapsed());
     stats_.label_build_cpu_s = to_seconds(sw.cpu_elapsed());
@@ -229,16 +220,17 @@ void HubLabelsAlgorithm::build_labels() {
         labeled_count_ > 0 ? static_cast<double>(total_bwd_entries) / static_cast<double>(labeled_count_) : 0.0;
     stats_.max_label_size_fwd = max_fwd;
     stats_.max_label_size_bwd = max_bwd;
-    stats_.label_memory_mb = label_bytes / (1024.0 * 1024.0);
+    stats_.label_memory_mb = static_cast<double>(total_label_bytes) / (1024.0 * 1024.0);
     stats_.prune_drops = prune_drops;
 }
 
 // ----- collect (shared upward-search helper) -----
 
-uint32_t HubLabelsAlgorithm::collect(VertexId start, const std::vector<uint64_t> &ch_offsets,
-                                     const std::vector<Edge> &ch_edges, const std::vector<uint64_t> &label_offsets,
-                                     const std::vector<HlEntry> &label_data, StampedVector<Distance> &scratch,
-                                     std::vector<HlEntry> &out, std::vector<VertexId> &unlabeled_settled) const {
+uint32_t HubLabelsAlgorithm::collect(VertexId start,
+                                     std::span<const Edge> (ContractionHierarchy::*adjacent_edges)(VertexId) const,
+                                     std::span<const HlEntry> (HubLabelsAlgorithm::*label)(VertexId) const,
+                                     StampedVector<Distance> &scratch, std::vector<HlEntry> &out,
+                                     std::vector<VertexId> &unlabeled_settled) const {
     std::unordered_map<VertexId, Distance> hub_best;
     hub_best.reserve(256);
 
@@ -255,10 +247,8 @@ uint32_t HubLabelsAlgorithm::collect(VertexId start, const std::vector<uint64_t>
         }
         ++settled;
         if (is_labeled(top.v)) {
-            const auto label_span =
-                std::span(label_data.data() + label_offsets[top.v], label_data.data() + label_offsets[top.v + 1]);
-            for (const HlEntry &e : label_span) {
-                const Distance nd = top.key <= kUnreachable - e.dist ? top.key + e.dist : kUnreachable;
+            for (const HlEntry &e : (this->*label)(top.v)) {
+                const Distance nd = saturating_add(top.key, e.dist);
                 auto [it, inserted] = hub_best.emplace(e.hub, nd);
                 if (!inserted && nd < it->second) {
                     it->second = nd;
@@ -267,10 +257,8 @@ uint32_t HubLabelsAlgorithm::collect(VertexId start, const std::vector<uint64_t>
             continue;
         }
         unlabeled_settled.push_back(top.v);
-        for (const Edge &e :
-             std::span(ch_edges).subspan(static_cast<size_t>(ch_offsets[top.v]),
-                                         static_cast<size_t>(ch_offsets[top.v + 1] - ch_offsets[top.v]))) {
-            const Distance nd = top.key <= kUnreachable - e.weight ? top.key + e.weight : kUnreachable;
+        for (const Edge &e : (ch_.*adjacent_edges)(top.v)) {
+            const Distance nd = saturating_add(top.key, e.weight);
             if (nd < scratch.get(e.to)) {
                 scratch.set(e.to, nd);
                 pq.push({nd, e.to});
@@ -305,16 +293,16 @@ PathResult HubLabelsAlgorithm::query(VertexId source, VertexId target) const {
         // source labeled, target unlabeled
         bwd_scratch_.reset();
         std::vector<VertexId> dummy;
-        settled = collect(target, ch_.backward_offsets, ch_.backward_edges, bwd_offsets_, bwd_labels_, bwd_scratch_,
-                          collect_buf_bwd_, dummy);
+        settled = collect(target, &ContractionHierarchy::backward_adjacent_edges, &HubLabelsAlgorithm::bwd_label,
+                          bwd_scratch_, collect_buf_bwd_, dummy);
         bwd_scratch_.reset();
         dist = intersect_labels(fwd_label(source), collect_buf_bwd_);
     } else if (t_lab) {
         // source unlabeled, target labeled
         fwd_scratch_.reset();
         std::vector<VertexId> dummy;
-        settled = collect(source, ch_.forward_offsets, ch_.forward_edges, fwd_offsets_, fwd_labels_, fwd_scratch_,
-                          collect_buf_fwd_, dummy);
+        settled = collect(source, &ContractionHierarchy::forward_adjacent_edges, &HubLabelsAlgorithm::fwd_label,
+                          fwd_scratch_, collect_buf_fwd_, dummy);
         fwd_scratch_.reset();
         dist = intersect_labels(collect_buf_fwd_, bwd_label(target));
     } else {
@@ -324,10 +312,12 @@ PathResult HubLabelsAlgorithm::query(VertexId source, VertexId target) const {
 
         std::vector<VertexId> fwd_unlabeled;
         std::vector<VertexId> bwd_unlabeled;
-        const uint32_t fwd_settled = collect(source, ch_.forward_offsets, ch_.forward_edges, fwd_offsets_, fwd_labels_,
-                                             fwd_scratch_, collect_buf_fwd_, fwd_unlabeled);
-        const uint32_t bwd_settled = collect(target, ch_.backward_offsets, ch_.backward_edges, bwd_offsets_,
-                                             bwd_labels_, bwd_scratch_, collect_buf_bwd_, bwd_unlabeled);
+        const uint32_t fwd_settled =
+            collect(source, &ContractionHierarchy::forward_adjacent_edges, &HubLabelsAlgorithm::fwd_label, fwd_scratch_,
+                    collect_buf_fwd_, fwd_unlabeled);
+        const uint32_t bwd_settled =
+            collect(target, &ContractionHierarchy::backward_adjacent_edges, &HubLabelsAlgorithm::bwd_label,
+                    bwd_scratch_, collect_buf_bwd_, bwd_unlabeled);
         settled = fwd_settled + bwd_settled;
 
         // mu_low: min dist_fwd[v] + dist_bwd[v] over fwd-settled unlabeled vertices.
@@ -335,9 +325,7 @@ PathResult HubLabelsAlgorithm::query(VertexId source, VertexId target) const {
         for (const VertexId v : fwd_unlabeled) {
             const Distance db = bwd_scratch_.get(v);
             if (db != kUnreachable) {
-                const Distance df = fwd_scratch_.get(v);
-                const Distance candidate = df <= kUnreachable - db ? df + db : kUnreachable;
-                mu_low = std::min(mu_low, candidate);
+                mu_low = std::min(mu_low, saturating_add(fwd_scratch_.get(v), db));
             }
         }
 

@@ -78,9 +78,9 @@ private:
     static_assert(sizeof(HlEntry) == 16);
 
     // CSR labels indexed by vertex_id; unlabeled vertices have empty ranges.
-    std::vector<uint64_t> fwd_offsets_; // size V+1
+    std::vector<size_t> fwd_offsets_; // size V+1
     std::vector<HlEntry> fwd_labels_;
-    std::vector<uint64_t> bwd_offsets_; // size V+1
+    std::vector<size_t> bwd_offsets_; // size V+1
     std::vector<HlEntry> bwd_labels_;
 
     HlStats stats_;
@@ -106,12 +106,17 @@ private:
 
     void build_labels();
 
-    // Upward CH search from `start`, stopping at labeled vertices and collecting
-    // their labels from `label_offsets`/`label_data`.  Settled unlabeled vertices
-    // appended to `unlabeled_settled`; caller resets `scratch` before and after.
-    // Returns the number of vertices actually settled (popped with a valid key).
-    uint32_t collect(VertexId start, const std::vector<uint64_t> &ch_offsets, const std::vector<Edge> &ch_edges,
-                     const std::vector<uint64_t> &label_offsets, const std::vector<HlEntry> &label_data,
+    // Dijkstra-style upward search from `start` over one CH direction (forward or
+    // backward, selected by `adjacent_edges`/`label` — pass the matching pair of
+    // ContractionHierarchy/HubLabelsAlgorithm accessors, e.g.
+    // (&ContractionHierarchy::forward_adjacent_edges, &HubLabelsAlgorithm::fwd_label)).
+    // Stops expanding at each labeled vertex it settles and instead merges that
+    // vertex's label into `out` (sorted by hub, ready for intersect_labels); unlabeled
+    // vertices it settles are expanded further and appended to `unlabeled_settled`
+    // (used by query() to compute the mu_low CH fallback). Caller resets `scratch`
+    // before and after calling. Returns the number of vertices settled.
+    uint32_t collect(VertexId start, std::span<const Edge> (ContractionHierarchy::*adjacent_edges)(VertexId) const,
+                     std::span<const HlEntry> (HubLabelsAlgorithm::*label)(VertexId) const,
                      StampedVector<Distance> &scratch, std::vector<HlEntry> &out,
                      std::vector<VertexId> &unlabeled_settled) const;
 };
