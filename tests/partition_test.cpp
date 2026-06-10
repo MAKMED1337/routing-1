@@ -23,9 +23,7 @@ bool check_valid_partition(const transport::Graph &graph, uint16_t regions, tran
 }
 
 bool check_partition() {
-    const transport::test::GraphWithCoords fixture = transport::test::make_coord_graph();
-    const transport::Graph &graph = fixture.graph;
-    const std::span<const transport::NodeCoord> coords = fixture.coords;
+    const auto [graph, coords] = transport::test::make_coord_graph();
 
     for (const uint16_t regions : {uint16_t{1}, uint16_t{4}, uint16_t{9}}) {
         if (!check_valid_partition(graph, regions, transport::PartitionMethod::Grid, coords)) {

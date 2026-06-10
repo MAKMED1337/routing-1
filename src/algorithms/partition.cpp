@@ -19,9 +19,7 @@ namespace {
 
 std::vector<uint16_t> partition_grid(const Graph &graph, uint16_t regions, std::span<const NodeCoord> coords) {
     const VertexId V = graph.vertex_count();
-    if (coords.size() != static_cast<size_t>(V)) {
-        throw std::invalid_argument("grid partition requires coordinates matching the graph vertices");
-    }
+    require_matching_coords(coords, V, "grid partition");
     const auto side = static_cast<uint32_t>(std::ceil(std::sqrt(regions)));
     const uint32_t cols = side;
     const uint32_t rows = (static_cast<uint32_t>(regions) + cols - 1) / cols;
@@ -86,9 +84,7 @@ std::vector<uint16_t> partition_inertial(const Graph &graph, uint16_t regions, s
         throw std::invalid_argument("inertial partition requires regions to be a power of 2");
     }
     const VertexId V = graph.vertex_count();
-    if (coords.size() != static_cast<size_t>(V)) {
-        throw std::invalid_argument("inertial partition requires coordinates matching the graph vertices");
-    }
+    require_matching_coords(coords, V, "inertial partition");
     std::vector<uint16_t> result(V, 0);
     std::vector<VertexId> all(V);
     for (VertexId v = 0; v < V; ++v) {

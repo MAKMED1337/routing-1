@@ -8,6 +8,7 @@
 #include "algorithms/hl/hub_labels.hpp"
 #include "algorithms/phast.hpp"
 #include "graph/graph.hpp"
+#include "graph/reverse_graph.hpp"
 #include "graph_fixtures.hpp"
 #include "routing_test_utils.hpp"
 
@@ -80,11 +81,14 @@ bool check_all_algorithms(const transport::Graph &graph, std::span<const transpo
 
     auto zero_heuristic = [](transport::VertexId, transport::VertexId) -> transport::Distance { return 0; };
     transport::AStarAlgorithm astar(graph, zero_heuristic);
-    transport::AltAlgorithm alt(graph, 4, transport::alt::LandmarkStrategy::Farthest, 2, std::mt19937{1});
+    std::mt19937 alt_rng{1};
+    const transport::Graph reverse = transport::build_reverse_graph(graph);
+    transport::alt::LandmarkSet alt_landmarks =
+        transport::alt::build_landmarks(graph, reverse, 4, transport::alt::LandmarkStrategy::Farthest, alt_rng);
+    transport::AltAlgorithm alt(graph, std::move(alt_landmarks), 2);
     transport::BidirectionalAStarAlgorithm bidi_astar(graph, zero_heuristic);
     transport::BidirectionalDijkstraAlgorithm bidijkstra(graph);
     transport::ContractionHierarchyAlgorithm ch(graph);
-    alt.preprocess();
     bidi_astar.preprocess();
     bidijkstra.preprocess();
     ch.preprocess();

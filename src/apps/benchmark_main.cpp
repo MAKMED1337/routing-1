@@ -140,12 +140,6 @@ int main(int argc, char **argv) {
     if (!coords_path.empty()) {
         coords = transport::load_coords_binary(coords_path);
     }
-    for (const std::string &algo : {algorithm_a, algorithm_b}) {
-        if ((algo == "astar" || algo == "bidi_astar") && coords_path.empty()) {
-            std::cerr << "algorithm '" << algo << "' requires --coords <coords.bin>\n";
-            return 1;
-        }
-    }
 
     std::unique_ptr<RoutingAlgorithm> runner_a;
     std::unique_ptr<RoutingAlgorithm> runner_b;

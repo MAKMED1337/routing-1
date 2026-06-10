@@ -23,10 +23,8 @@ std::unique_ptr<RoutingAlgorithm> make_routing_algorithm(const std::string &name
     if (name == "dijkstra") {
         return std::make_unique<DijkstraAlgorithm>(graph);
     }
-    if (name == "astar" || name == "bidi_astar") {
-        if (coords.size() != static_cast<size_t>(graph.vertex_count())) {
-            throw std::invalid_argument("algorithm '" + name + "' requires coordinates matching the graph vertices");
-        }
+    if (name == "astar" || name == "bidi_astar" || name == "arcflags" || name == "chase") {
+        require_matching_coords(coords, graph.vertex_count(), "algorithm '" + name + "'");
     }
     auto haversine_heuristic = [coords](VertexId from, VertexId to) -> Distance {
         return static_cast<Distance>(

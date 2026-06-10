@@ -42,11 +42,12 @@ template <typename T> void write_one(std::ofstream &out, const T &value) {
     out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
 }
 
-template <typename T> void read_one(std::ifstream &in, T &value) {
+template <typename T> bool read_one(std::ifstream &in, T &value) {
     static_assert(std::is_trivially_copyable_v<T>);
     std::array<char, sizeof(T)> bytes{};
     in.read(bytes.data(), static_cast<std::streamsize>(bytes.size()));
     value = std::bit_cast<T>(bytes);
+    return static_cast<bool>(in);
 }
 
 void validate_graph(const Graph &graph, uint64_t expected_edges) {
@@ -187,13 +188,17 @@ std::vector<NodeCoord> load_coords_binary(const std::string &path) {
     }
 
     uint32_t magic = 0;
-    read_one(in, magic);
+    if (!read_one(in, magic)) {
+        throw std::runtime_error("corrupted coords file: failed to read magic");
+    }
     if (magic != kMagicCoords) {
         throw std::runtime_error("invalid coords file magic");
     }
 
     uint32_t vertices = 0;
-    read_one(in, vertices);
+    if (!read_one(in, vertices)) {
+        throw std::runtime_error("corrupted coords file: failed to read vertex count");
+    }
 
     std::vector<NodeCoord> coords(vertices);
     for (NodeCoord &node : coords) {
@@ -204,6 +209,12 @@ std::vector<NodeCoord> load_coords_binary(const std::string &path) {
         }
     }
     return coords;
+}
+
+void require_matching_coords(std::span<const NodeCoord> coords, VertexId vertex_count, std::string_view context) {
+    if (coords.size() != static_cast<size_t>(vertex_count)) {
+        throw std::invalid_argument(std::string(context) + " requires coordinates matching the graph vertices");
+    }
 }
 
 double haversine_meters(const NodeCoord &a, const NodeCoord &b) {

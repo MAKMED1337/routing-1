@@ -42,23 +42,21 @@ Distance compute_potential(const alt::LandmarkSet &landmarks, const std::vector<
     return best;
 }
 
+alt::LandmarkSet default_landmarks(const Graph &graph) {
+    std::mt19937 rng{42};
+    const Graph reverse = build_reverse_graph(graph);
+    return alt::build_landmarks(graph, reverse, 16, alt::LandmarkStrategy::Farthest, rng);
+}
+
 } // namespace
 
-AltAlgorithm::AltAlgorithm(const Graph &graph)
-    : AltAlgorithm(graph, 16, alt::LandmarkStrategy::Farthest, 4, std::mt19937{42}) {}
+AltAlgorithm::AltAlgorithm(const Graph &graph) : AltAlgorithm(graph, default_landmarks(graph), 4) {}
 
-AltAlgorithm::AltAlgorithm(const Graph &graph, uint32_t landmark_count, alt::LandmarkStrategy strategy,
-                           uint32_t active_landmarks, std::mt19937 rng, std::span<const NodeCoord> coords)
-    : graph_(graph), landmark_count_(landmark_count), strategy_(strategy), active_landmarks_(active_landmarks),
-      rng_(std::move(rng)), coords_(coords),
+AltAlgorithm::AltAlgorithm(const Graph &graph, alt::LandmarkSet landmarks, uint32_t active_landmarks)
+    : graph_(graph), active_landmarks_(active_landmarks), landmarks_(std::move(landmarks)),
       astar_(graph, [this](VertexId vertex, VertexId target) { return potential(vertex, target); }) {}
 
 std::string_view AltAlgorithm::name() const { return "alt"; }
-
-void AltAlgorithm::preprocess() {
-    reverse_ = build_reverse_graph(graph_);
-    landmarks_ = alt::build_landmarks(graph_, reverse_, landmark_count_, strategy_, rng_, coords_);
-}
 
 uint64_t AltAlgorithm::landmark_table_bytes() const {
     return static_cast<uint64_t>((landmarks_.dist_from.size() + landmarks_.dist_to.size()) * sizeof(Distance));

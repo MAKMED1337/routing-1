@@ -87,9 +87,7 @@ std::vector<VertexId> select_planar(const Graph &graph, uint32_t landmark_count,
     if (vertices == 0 || landmark_count == 0) {
         return {};
     }
-    if (coords.size() != vertices) {
-        throw std::invalid_argument("planar landmark selection requires coordinates matching the graph vertices");
-    }
+    require_matching_coords(coords, static_cast<VertexId>(vertices), "planar landmark selection");
 
     landmark_count = std::min(landmark_count, static_cast<uint32_t>(vertices));
 

@@ -50,6 +50,15 @@ inline Graph make_asymmetric_graph() {
                          });
 }
 
+// 3-vertex directed chain: 0→1→2.
+inline Graph make_short_chain_graph() {
+    return make_graph(3, {
+                             /*0*/ {{1, 1}},
+                             /*1*/ {{2, 1}},
+                             /*2*/ {},
+                         });
+}
+
 // 5-vertex graph with two disconnected components: {0,1,2} and {3,4}.
 inline Graph make_disconnected_graph() {
     return make_graph(5, {

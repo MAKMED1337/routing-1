@@ -11,14 +11,11 @@ namespace {
 
 using transport::test::check_all_pairs;
 
-bool check_astar_requires_coords() {
-    const transport::Graph graph = transport::test::make_graph(3, {
-                                                                      /*0*/ {{1, 1}},
-                                                                      /*1*/ {{2, 1}},
-                                                                      /*2*/ {},
-                                                                  });
+bool check_partition_dependent_algorithms_require_coords() {
+    const transport::Graph graph = transport::test::make_short_chain_graph();
 
-    for (const std::string &algo : {std::string("astar"), std::string("bidi_astar")}) {
+    for (const std::string &algo :
+         {std::string("astar"), std::string("bidi_astar"), std::string("arcflags"), std::string("chase")}) {
         bool threw = false;
         try {
             (void)transport::make_routing_algorithm(algo, graph);
@@ -45,13 +42,14 @@ bool check_astar_requires_coords() {
     return true;
 }
 
-bool check_astar_works_with_coords() {
-    const transport::test::GraphWithCoords fixture = transport::test::make_grid_graph(3, 3);
+bool check_partition_dependent_algorithms_work_with_coords() {
+    const auto [graph, coords] = transport::test::make_grid_graph(3, 3);
 
-    for (const std::string &algo : {std::string("astar"), std::string("bidi_astar")}) {
-        auto algorithm = transport::make_routing_algorithm(algo, fixture.graph, fixture.coords);
+    for (const std::string &algo :
+         {std::string("astar"), std::string("bidi_astar"), std::string("arcflags"), std::string("chase")}) {
+        auto algorithm = transport::make_routing_algorithm(algo, graph, coords);
         algorithm->preprocess();
-        if (!check_all_pairs(fixture.graph, *algorithm, algo)) {
+        if (!check_all_pairs(graph, *algorithm, algo)) {
             return false;
         }
     }
@@ -74,8 +72,8 @@ bool check_graph_only_algorithms_need_no_coords() {
 
 int main() {
     bool ok = true;
-    ok &= check_astar_requires_coords();
-    ok &= check_astar_works_with_coords();
+    ok &= check_partition_dependent_algorithms_require_coords();
+    ok &= check_partition_dependent_algorithms_work_with_coords();
     ok &= check_graph_only_algorithms_need_no_coords();
     if (!ok) {
         std::cerr << "routing algorithm factory tests FAILED\n";
