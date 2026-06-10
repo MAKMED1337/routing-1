@@ -1,53 +1,27 @@
 #include "algorithms/ch/contraction_hierarchy.hpp"
 #include "apps/bench_utils.hpp"
 
-#include <cstdint>
+#include <CLI/CLI.hpp>
+
 #include <iostream>
-#include <limits>
 #include <stdexcept>
-#include <string>
-#include <string_view>
-
-namespace {
-
-uint32_t parse_u32(std::string_view text, std::string_view name) {
-    size_t consumed = 0;
-    const std::string value(text);
-    if (value.empty() || value.front() == '-') {
-        throw std::invalid_argument("invalid integer for " + std::string(name) + ": " + value);
-    }
-    const unsigned long long parsed = std::stoull(value, &consumed);
-    if (consumed != value.size()) {
-        throw std::invalid_argument("invalid integer for " + std::string(name) + ": " + value);
-    }
-    if (parsed > std::numeric_limits<uint32_t>::max()) {
-        throw std::invalid_argument("value too large for " + std::string(name) + ": " + value);
-    }
-    return static_cast<uint32_t>(parsed);
-}
-
-} // namespace
 
 int main(int argc, char **argv) {
-    if (argc < 2 || argc > 5) {
-        std::cerr << "usage: ch_measure <graph.graph> [queries=10000] [seed=1] [source_file]\n";
-        return 1;
-    }
-
     bench::BenchmarkArgs args;
-    args.graph_path = argv[1];
+
+    CLI::App app{"Measure Contraction Hierarchy preprocessing and query performance"};
+    app.add_option("graph", args.graph_path, "Input graph binary")->required()->check(CLI::ExistingFile);
+    app.add_option("queries", args.query_count, "Query count")->default_val(10'000)->check(CLI::PositiveNumber);
+    app.add_option("seed", args.seed, "Random seed")->default_val(1);
+    app.add_option("source_file", args.source_path, "Original source file path for benchmark metadata");
 
     try {
-        if (argc >= 3) {
-            args.query_count = parse_u32(argv[2], "queries");
-        }
-        if (argc >= 4) {
-            args.seed = parse_u32(argv[3], "seed");
-        }
-        if (argc >= 5) {
-            args.source_path = argv[4];
-        }
+        app.parse(argc, argv);
+    } catch (const CLI::ParseError &err) {
+        return app.exit(err);
+    }
 
+    try {
         auto loaded = bench::load_graph(args);
         transport::ContractionHierarchyAlgorithm ch(loaded.graph);
 

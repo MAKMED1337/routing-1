@@ -5,16 +5,16 @@
 #include "graph/graph_io.hpp"
 #include "routing/routing.hpp"
 
+#include <CLI/CLI.hpp>
+
 #include <array>
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
-#include <limits>
 #include <optional>
 #include <random>
-#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -40,39 +40,6 @@ struct TimedAlgorithmResult {
     std::string_view name;
     const TimedResult &timed;
 };
-
-void print_usage() {
-    std::cerr << "usage: transport_benchmark --graph <graph.bin> "
-                 "[--algorithm-a dijkstra|astar|alt|bidijkstra|bidi_astar|ch|arcflags|chase|hl] "
-                 "[--algorithm-b dijkstra|astar|alt|bidijkstra|bidi_astar|ch|arcflags|chase|hl] [--queries N] "
-                 "[--min-settled A] "
-                 "[--max-settled B] "
-                 "[--seed S] [--out file] [--coords <coords.bin>]\n";
-}
-
-std::string require_value(int argc, char **argv, int &i, std::string_view key) {
-    if (i + 1 >= argc) {
-        throw std::invalid_argument("missing value for " + std::string(key));
-    }
-    ++i;
-    return argv[i];
-}
-
-uint32_t parse_u32(std::string_view text, std::string_view key) {
-    size_t consumed = 0;
-    const std::string value(text);
-    if (value.empty() || value.front() == '-') {
-        throw std::invalid_argument("invalid integer for " + std::string(key) + ": " + value);
-    }
-    const unsigned long long parsed = std::stoull(value, &consumed);
-    if (consumed != value.size()) {
-        throw std::invalid_argument("invalid integer for " + std::string(key) + ": " + value);
-    }
-    if (parsed > std::numeric_limits<uint32_t>::max()) {
-        throw std::invalid_argument("value too large for " + std::string(key) + ": " + value);
-    }
-    return static_cast<uint32_t>(parsed);
-}
 
 TimedResult query_timed(const RoutingAlgorithm &algorithm, VertexId source, VertexId target) {
     const auto t0 = std::chrono::steady_clock::now();
@@ -128,11 +95,6 @@ void write_benchmark_row(std::ofstream &out, uint32_t query, VertexId source, Ve
 } // namespace
 
 int main(int argc, char **argv) {
-    if (argc == 2 && std::string(argv[1]) == "--help") {
-        print_usage();
-        return 0;
-    }
-
     std::string graph_path;
     std::string coords_path;
     std::string out_path = "reports/benchmarks/results.csv";
@@ -143,41 +105,25 @@ int main(int argc, char **argv) {
     uint32_t max_settled = 1'000'000;
     uint32_t seed = 1;
 
+    CLI::App app{"Compare two routing algorithms on sampled graph queries"};
+    app.add_option("--graph", graph_path, "Path to graph binary")->required()->check(CLI::ExistingFile);
+    app.add_option("--coords", coords_path, "Path to coordinates binary")->check(CLI::ExistingFile);
+    app.add_option("--out", out_path, "Output CSV path")->default_val("reports/benchmarks/results.csv");
+    app.add_option("--queries", queries, "Accepted query count")->default_val(10'000)->check(CLI::PositiveNumber);
+    app.add_option("--min-settled", min_settled, "Minimum settled vertices for accepted baseline queries")
+        ->default_val(100'000);
+    app.add_option("--max-settled", max_settled, "Maximum settled vertices for accepted baseline queries")
+        ->default_val(1'000'000);
+    app.add_option("--seed", seed, "Random seed")->default_val(1);
+    app.add_option("--algorithm-a", algorithm_a, "First routing algorithm")->default_val("dijkstra");
+    app.add_option("--algorithm-b", algorithm_b, "Second routing algorithm")->default_val("ch");
+
     try {
-        for (int i = 1; i < argc; ++i) {
-            const std::string key = argv[i];
-            if (key == "--graph") {
-                graph_path = require_value(argc, argv, i, key);
-            } else if (key == "--coords") {
-                coords_path = require_value(argc, argv, i, key);
-            } else if (key == "--out") {
-                out_path = require_value(argc, argv, i, key);
-            } else if (key == "--queries") {
-                queries = parse_u32(require_value(argc, argv, i, key), key);
-            } else if (key == "--min-settled") {
-                min_settled = parse_u32(require_value(argc, argv, i, key), key);
-            } else if (key == "--max-settled") {
-                max_settled = parse_u32(require_value(argc, argv, i, key), key);
-            } else if (key == "--seed") {
-                seed = parse_u32(require_value(argc, argv, i, key), key);
-            } else if (key == "--algorithm-a") {
-                algorithm_a = require_value(argc, argv, i, key);
-            } else if (key == "--algorithm-b") {
-                algorithm_b = require_value(argc, argv, i, key);
-            } else {
-                throw std::invalid_argument("unknown argument: " + key);
-            }
-        }
-    } catch (const std::exception &err) {
-        std::cerr << err.what() << "\n";
-        print_usage();
-        return 1;
+        app.parse(argc, argv);
+    } catch (const CLI::ParseError &err) {
+        return app.exit(err);
     }
 
-    if (graph_path.empty()) {
-        print_usage();
-        return 1;
-    }
     if (queries == 0) {
         std::cerr << "--queries must be > 0\n";
         return 1;
