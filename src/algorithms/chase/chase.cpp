@@ -18,9 +18,9 @@
 
 namespace transport {
 
-ChaseAlgorithm::ChaseAlgorithm(const Graph &graph, const ContractionHierarchy &ch, double core_fraction,
-                               uint16_t regions, PartitionMethod partition_method, std::span<const NodeCoord> coords)
-    : graph_(graph), regions_(regions), partition_method_(partition_method), coords_(coords), ch_(ch),
+ChaseAlgorithm::ChaseAlgorithm(const Graph &graph, ContractionHierarchy &&ch, double core_fraction, uint16_t regions,
+                               PartitionMethod partition_method, std::span<const NodeCoord> coords)
+    : graph_(graph), regions_(regions), partition_method_(partition_method), coords_(coords), ch_(std::move(ch)),
       core_threshold_(0), fwd_dist_(graph.vertex_count(), kUnreachable), bwd_dist_(graph.vertex_count(), kUnreachable) {
     if (regions == 0 || regions > 64) {
         throw std::invalid_argument("chase: regions must be in [1, 64]");

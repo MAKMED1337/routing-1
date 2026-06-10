@@ -21,9 +21,9 @@ constexpr Distance saturating_add(Distance a, Distance b) { return a <= kUnreach
 
 } // namespace
 
-HubLabelsAlgorithm::HubLabelsAlgorithm(const Graph &graph, const ContractionHierarchy &ch, double label_fraction,
+HubLabelsAlgorithm::HubLabelsAlgorithm(const Graph &graph, ContractionHierarchy &&ch, double label_fraction,
                                        uint64_t memory_budget_bytes)
-    : graph_(graph), ch_(ch), label_fraction_(label_fraction), memory_budget_bytes_(memory_budget_bytes) {
+    : graph_(graph), ch_(std::move(ch)), label_fraction_(label_fraction), memory_budget_bytes_(memory_budget_bytes) {
     if (label_fraction_ <= 0.0 || label_fraction_ > 1.0 || !std::isfinite(label_fraction_)) {
         throw std::invalid_argument("hl: label_fraction must be in (0, 1]");
     }

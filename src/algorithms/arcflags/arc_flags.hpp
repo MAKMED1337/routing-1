@@ -21,19 +21,13 @@ namespace transport {
 // At query time, standard Dijkstra skips edges whose bitmask does not include the target's bit.
 // Supports up to 64 regions. Multi-threaded flag computation via threads parameter (>= 1).
 //
-// Requires a prebuilt PhastAlgorithm (e.g. from a shared RoutingPreprocessingContext); this
-// algorithm does not build CH/PHAST itself.
+// Requires a prebuilt PhastAlgorithm, moved in via the constructor; this algorithm does not
+// build CH/PHAST itself.
 class ArcFlagsAlgorithm final : public RoutingAlgorithm {
 public:
-    explicit ArcFlagsAlgorithm(const Graph &graph, const PhastAlgorithm &phast, uint16_t regions = 32,
+    explicit ArcFlagsAlgorithm(const Graph &graph, PhastAlgorithm &&phast, uint16_t regions = 32,
                                PartitionMethod partition_method = PartitionMethod::Inertial, uint32_t threads = 1,
                                std::span<const NodeCoord> coords = {});
-
-    // phast_ stores a reference to the argument above, so binding it to a temporary would
-    // leave a dangling reference as soon as the constructor returns. Reject that at compile time.
-    ArcFlagsAlgorithm(const Graph &graph, PhastAlgorithm &&phast, uint16_t regions = 32,
-                      PartitionMethod partition_method = PartitionMethod::Inertial, uint32_t threads = 1,
-                      std::span<const NodeCoord> coords = {}) = delete;
 
     std::string_view name() const override;
     void preprocess() override;
@@ -41,7 +35,7 @@ public:
 
 private:
     const Graph &graph_;
-    const PhastAlgorithm &phast_;
+    PhastAlgorithm phast_;
     uint16_t regions_;
     PartitionMethod partition_method_;
     uint32_t threads_;

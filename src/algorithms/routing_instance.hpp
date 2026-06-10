@@ -1,61 +1,46 @@
 #pragma once
 
+#include "algorithms/ch/contraction_hierarchy.hpp"
 #include "algorithms/routing_algorithm.hpp"
-#include "algorithms/routing_preprocessing_context.hpp"
 #include "graph/geometry.hpp"
 #include "graph/graph.hpp"
 
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 
 namespace transport {
 
-// Replaces the old make_routing_algorithm() factory, which returned a bare
-// unique_ptr<RoutingAlgorithm> and left each CH-dependent algorithm to build its own CH/PHAST.
-// RoutingInstance is what callers (transport_query, transport_benchmark, tests) construct
-// instead: it owns both the RoutingPreprocessingContext (CH/PHAST, built once and shared) and
-// the RoutingAlgorithm built on top of it, so the two stay paired and the algorithm's
-// const-reference dependencies remain valid for the instance's lifetime.
-//
-// make_routing_instance() construction is cheap: it validates arguments but builds no expensive
-// artifacts. preprocess() sequences dependency-artifact construction (CH/PHAST, timed
-// separately as "dependency" cost) before constructing and preprocessing the algorithm itself
-// (timed as "algorithm" cost), so benchmarks can attribute shared preprocessing correctly.
-class RoutingInstance {
-public:
-    RoutingInstance(const Graph &graph, std::string algorithm_name, std::span<const NodeCoord> coords);
-
-    void preprocess();
-
-    [[nodiscard]] const RoutingAlgorithm &algorithm() const;
-
-    [[nodiscard]] const RoutingPreprocessingContext &context() const { return context_; }
-
-    struct PreprocessTiming {
-        double dependency_wall_s = 0.0;
-        double dependency_cpu_s = 0.0;
-        double algorithm_wall_s = 0.0;
-        double algorithm_cpu_s = 0.0;
-        double after_dependency_peak_rss_mb = 0.0;
-        double after_algorithm_peak_rss_mb = 0.0;
-    };
-    [[nodiscard]] const PreprocessTiming &timing() const { return timing_; }
-
-private:
-    const Graph &graph_;
-    std::string algorithm_name_;
-    std::span<const NodeCoord> coords_;
-    RoutingPreprocessingContext context_;
-    std::unique_ptr<RoutingAlgorithm> algorithm_;
-    bool preprocessed_ = false;
-    PreprocessTiming timing_;
-
-    [[nodiscard]] std::unique_ptr<RoutingAlgorithm> build_algorithm();
+struct DependencyPreprocessStats {
+    double wall_s = 0.0;
+    double cpu_s = 0.0;
+    double peak_rss_mb = 0.0;
+    std::optional<PreprocessStats> ch; // CH ordering_init_ns/witness_calls, when CH was built
 };
 
-// Validates `name`/`coords` and returns a cheaply-constructed RoutingInstance. Call
-// instance.preprocess() before instance.algorithm().query(...).
+struct AlgorithmPreprocessStats {
+    double wall_s = 0.0;
+    double cpu_s = 0.0;
+    double peak_rss_mb = 0.0;
+};
+
+struct PreprocessReport {
+    DependencyPreprocessStats dependency;
+    AlgorithmPreprocessStats algorithm;
+};
+
+// Bundle returned by make_routing_instance(): the constructed, already-preprocessed algorithm
+// plus a breakdown of preprocessing cost between shared-dependency (CH/PHAST) and
+// algorithm-specific phases.
+struct RoutingInstance {
+    std::unique_ptr<RoutingAlgorithm> algorithm;
+    PreprocessReport stats;
+};
+
+// Validates `name`/`coords`, builds any CH/PHAST dependency the algorithm needs, constructs the
+// algorithm (moving the dependency in), and runs its preprocess(). Returns the algorithm ready to
+// query, along with a timing/RSS breakdown of the dependency vs. algorithm preprocessing phases.
 [[nodiscard]] RoutingInstance make_routing_instance(const std::string &name, const Graph &graph,
                                                     std::span<const NodeCoord> coords = {});
 

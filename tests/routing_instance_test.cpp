@@ -36,8 +36,7 @@ bool check_partition_dependent_algorithms_work_with_coords() {
     for (const std::string &algo :
          {std::string("astar"), std::string("bidi_astar"), std::string("arcflags"), std::string("chase")}) {
         transport::RoutingInstance instance = transport::make_routing_instance(algo, graph, coords);
-        instance.preprocess();
-        if (!check_all_pairs(graph, instance.algorithm(), algo)) {
+        if (!check_all_pairs(graph, *instance.algorithm, algo)) {
             return false;
         }
     }
@@ -48,24 +47,17 @@ bool check_graph_only_algorithms_need_no_coords() {
     const transport::Graph graph = transport::test::make_line_graph();
     for (const std::string &algo : {std::string("dijkstra"), std::string("bidijkstra"), std::string("ch")}) {
         transport::RoutingInstance instance = transport::make_routing_instance(algo, graph);
-        instance.preprocess();
-        if (!check_all_pairs(graph, instance.algorithm(), algo)) {
+        if (!check_all_pairs(graph, *instance.algorithm, algo)) {
             return false;
         }
     }
     return true;
 }
 
-bool check_instance_algorithm_throws_before_preprocess() {
+bool check_unsupported_algorithm_throws() {
     const transport::Graph graph = transport::test::make_line_graph();
-    transport::RoutingInstance instance = transport::make_routing_instance("dijkstra", graph);
-    try {
-        (void)instance.algorithm();
-    } catch (const std::logic_error &) {
-        return true;
-    }
-    std::cerr << "instance: expected algorithm() to throw before preprocess()\n";
-    return false;
+    return expect_throws([&] { (void)transport::make_routing_instance("not-an-algorithm", graph); },
+                         "factory: expected unsupported algorithm name to throw");
 }
 
 bool check_dependency_preprocessing_runs_for_ch_dependent_algorithms() {
@@ -73,12 +65,15 @@ bool check_dependency_preprocessing_runs_for_ch_dependent_algorithms() {
 
     for (const std::string &algo : {std::string("arcflags"), std::string("chase"), std::string("hl")}) {
         transport::RoutingInstance instance = transport::make_routing_instance(algo, graph, coords);
-        instance.preprocess();
-        if (instance.timing().dependency_wall_s < 0.0) {
-            std::cerr << "instance: expected non-negative dependency_wall_s for '" << algo << "'\n";
+        if (instance.stats.dependency.wall_s < 0.0) {
+            std::cerr << "instance: expected non-negative dependency wall_s for '" << algo << "'\n";
             return false;
         }
-        if (!check_all_pairs(graph, instance.algorithm(), algo)) {
+        if (!instance.stats.dependency.ch.has_value()) {
+            std::cerr << "instance: expected nested CH stats for '" << algo << "'\n";
+            return false;
+        }
+        if (!check_all_pairs(graph, *instance.algorithm, algo)) {
             return false;
         }
     }
@@ -92,7 +87,7 @@ int main() {
     ok &= check_partition_dependent_algorithms_require_coords();
     ok &= check_partition_dependent_algorithms_work_with_coords();
     ok &= check_graph_only_algorithms_need_no_coords();
-    ok &= check_instance_algorithm_throws_before_preprocess();
+    ok &= check_unsupported_algorithm_throws();
     ok &= check_dependency_preprocessing_runs_for_ch_dependent_algorithms();
     if (!ok) {
         std::cerr << "routing instance tests FAILED\n";

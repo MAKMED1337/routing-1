@@ -1,6 +1,7 @@
 #include "algorithms/ch/contraction_hierarchy.hpp"
 #include "algorithms/routing_algorithm.hpp"
 #include "algorithms/routing_instance.hpp"
+#include "algorithms/stopwatch.hpp"
 #include "graph/graph_io.hpp"
 #include "routing/routing.hpp"
 
@@ -22,8 +23,10 @@ namespace fs = std::filesystem;
 using transport::ContractionHierarchyAlgorithm;
 using transport::Graph;
 using transport::PathResult;
+using transport::PreprocessReport;
 using transport::RoutingAlgorithm;
 using transport::RoutingInstance;
+using transport::to_seconds;
 using transport::VertexId;
 
 namespace {
@@ -82,14 +85,19 @@ TimedResult query_timed(const RoutingAlgorithm &algorithm, VertexId source, Vert
 bool same_distance(uint64_t a, uint64_t b) { return a == b; }
 
 void print_preprocessing_metrics(std::string_view prefix, const RoutingInstance &instance) {
-    const RoutingInstance::PreprocessTiming &timing = instance.timing();
-    std::cout << prefix << "_dependency_preprocess_wall_s=" << timing.dependency_wall_s << "\n";
-    std::cout << prefix << "_dependency_preprocess_cpu_s=" << timing.dependency_cpu_s << "\n";
-    std::cout << prefix << "_algorithm_preprocess_wall_s=" << timing.algorithm_wall_s << "\n";
-    std::cout << prefix << "_algorithm_preprocess_cpu_s=" << timing.algorithm_cpu_s << "\n";
-    std::cout << prefix << "_after_dependency_preprocess_peak_rss_mb=" << timing.after_dependency_peak_rss_mb << "\n";
-    std::cout << prefix << "_after_algorithm_preprocess_peak_rss_mb=" << timing.after_algorithm_peak_rss_mb << "\n";
-    if (const auto *ch = dynamic_cast<const ContractionHierarchyAlgorithm *>(&instance.algorithm())) {
+    const PreprocessReport &report = instance.stats;
+    std::cout << prefix << "_dependency_preprocess_wall_s=" << report.dependency.wall_s << "\n";
+    std::cout << prefix << "_dependency_preprocess_cpu_s=" << report.dependency.cpu_s << "\n";
+    std::cout << prefix << "_algorithm_preprocess_wall_s=" << report.algorithm.wall_s << "\n";
+    std::cout << prefix << "_algorithm_preprocess_cpu_s=" << report.algorithm.cpu_s << "\n";
+    std::cout << prefix << "_after_dependency_preprocess_peak_rss_mb=" << report.dependency.peak_rss_mb << "\n";
+    std::cout << prefix << "_after_algorithm_preprocess_peak_rss_mb=" << report.algorithm.peak_rss_mb << "\n";
+    if (report.dependency.ch) {
+        std::cout << prefix << "_dependency_ch_witness_calls=" << report.dependency.ch->witness_calls << "\n";
+        std::cout << prefix << "_dependency_ch_ordering_init_s=" << to_seconds(report.dependency.ch->ordering_init_ns)
+                  << "\n";
+    }
+    if (const auto *ch = dynamic_cast<const ContractionHierarchyAlgorithm *>(instance.algorithm.get())) {
         std::cout << prefix << "_auxiliary_edges=" << ch->auxiliary_edge_count() << "\n";
     }
 }
@@ -190,14 +198,12 @@ int main(int argc, char **argv) {
     try {
         instance_a.emplace(transport::make_routing_instance(algorithm_a, graph, coords));
         instance_b.emplace(transport::make_routing_instance(algorithm_b, graph, coords));
-        instance_a->preprocess();
-        instance_b->preprocess();
     } catch (const std::exception &err) {
         std::cerr << err.what() << "\n";
         return 1;
     }
-    const RoutingAlgorithm &runner_a_algo = instance_a->algorithm();
-    const RoutingAlgorithm &runner_b_algo = instance_b->algorithm();
+    const RoutingAlgorithm &runner_a_algo = *instance_a->algorithm;
+    const RoutingAlgorithm &runner_b_algo = *instance_b->algorithm;
     print_preprocessing_metrics(runner_a_algo.name(), *instance_a);
     print_preprocessing_metrics(runner_b_algo.name(), *instance_b);
 

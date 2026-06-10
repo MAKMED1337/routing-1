@@ -33,15 +33,9 @@ namespace transport {
 // so no shortest-path arc is ever wrongly pruned.
 class ChaseAlgorithm final : public RoutingAlgorithm {
 public:
-    explicit ChaseAlgorithm(const Graph &graph, const ContractionHierarchy &ch, double core_fraction = 0.05,
+    explicit ChaseAlgorithm(const Graph &graph, ContractionHierarchy &&ch, double core_fraction = 0.05,
                             uint16_t regions = 64, PartitionMethod partition_method = PartitionMethod::Inertial,
                             std::span<const NodeCoord> coords = {});
-
-    // ch_ stores a reference to the argument above, so binding it to a temporary would leave a
-    // dangling reference as soon as the constructor returns. Reject that at compile time.
-    ChaseAlgorithm(const Graph &graph, ContractionHierarchy &&ch, double core_fraction = 0.05, uint16_t regions = 64,
-                   PartitionMethod partition_method = PartitionMethod::Inertial,
-                   std::span<const NodeCoord> coords = {}) = delete;
 
     std::string_view name() const override;
     void preprocess() override;
@@ -53,7 +47,7 @@ private:
     PartitionMethod partition_method_;
     std::span<const NodeCoord> coords_;
 
-    const ContractionHierarchy &ch_;
+    ContractionHierarchy ch_;
     bool preprocessed_ = false;
 
     VertexId core_threshold_; // rank >= core_threshold_ => vertex is in core; set at construction

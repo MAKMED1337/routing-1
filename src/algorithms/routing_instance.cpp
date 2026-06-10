@@ -11,6 +11,7 @@
 #include "algorithms/heuristic.hpp"
 #include "algorithms/hl/hub_labels.hpp"
 #include "algorithms/partition.hpp"
+#include "algorithms/phast.hpp"
 #include "algorithms/stopwatch.hpp"
 
 #include <cmath>
@@ -38,76 +39,60 @@ bool requires_coords(const std::string &name) {
     return name == "astar" || name == "bidi_astar" || name == "arcflags" || name == "chase";
 }
 
-} // namespace
-
-RoutingInstance::RoutingInstance(const Graph &graph, std::string algorithm_name, std::span<const NodeCoord> coords)
-    : graph_(graph), algorithm_name_(std::move(algorithm_name)), coords_(coords), context_(graph) {}
-
-const RoutingAlgorithm &RoutingInstance::algorithm() const {
-    if (!algorithm_) {
-        throw std::logic_error("RoutingInstance::preprocess() must be called before algorithm()");
+std::unique_ptr<RoutingAlgorithm> build_algorithm(const std::string &name, const Graph &graph,
+                                                  std::span<const NodeCoord> coords,
+                                                  DependencyPreprocessStats &dependency_stats) {
+    if (name == "dijkstra") {
+        return std::make_unique<DijkstraAlgorithm>(graph);
     }
-    return *algorithm_;
-}
-
-std::unique_ptr<RoutingAlgorithm> RoutingInstance::build_algorithm() {
-    if (algorithm_name_ == "dijkstra") {
-        return std::make_unique<DijkstraAlgorithm>(graph_);
+    if (name == "astar") {
+        return std::make_unique<AStarAlgorithm>(graph, make_haversine_heuristic(coords));
     }
-    if (algorithm_name_ == "astar") {
-        return std::make_unique<AStarAlgorithm>(graph_, make_haversine_heuristic(coords_));
+    if (name == "alt") {
+        return std::make_unique<AltAlgorithm>(graph);
     }
-    if (algorithm_name_ == "alt") {
-        return std::make_unique<AltAlgorithm>(graph_);
+    if (name == "bidijkstra") {
+        return std::make_unique<BidirectionalDijkstraAlgorithm>(graph);
     }
-    if (algorithm_name_ == "bidijkstra") {
-        return std::make_unique<BidirectionalDijkstraAlgorithm>(graph_);
+    if (name == "bidi_astar") {
+        return std::make_unique<BidirectionalAStarAlgorithm>(graph, make_haversine_heuristic(coords));
     }
-    if (algorithm_name_ == "bidi_astar") {
-        return std::make_unique<BidirectionalAStarAlgorithm>(graph_, make_haversine_heuristic(coords_));
-    }
-    if (algorithm_name_ == "ch") {
-        return std::make_unique<ContractionHierarchyAlgorithm>(graph_);
-    }
-    if (algorithm_name_ == "arcflags") {
-        return std::make_unique<ArcFlagsAlgorithm>(graph_, context_.phast(), uint16_t{32}, PartitionMethod::Inertial,
-                                                   uint32_t{1}, coords_);
-    }
-    if (algorithm_name_ == "chase") {
-        return std::make_unique<ChaseAlgorithm>(graph_, context_.ch(), 0.05, uint16_t{64}, PartitionMethod::Inertial,
-                                                coords_);
-    }
-    if (algorithm_name_ == "hl") {
-        return std::make_unique<HubLabelsAlgorithm>(graph_, context_.ch());
-    }
-    throw std::invalid_argument("unsupported algorithm: " + algorithm_name_);
-}
-
-void RoutingInstance::preprocess() {
-    if (preprocessed_) {
-        return;
+    if (name == "ch") {
+        return std::make_unique<ContractionHierarchyAlgorithm>(graph);
     }
 
     Stopwatch dependency_sw;
-    if (algorithm_name_ == "arcflags") {
-        context_.build_phast();
-    } else if (algorithm_name_ == "chase" || algorithm_name_ == "hl") {
-        context_.build_ch();
+    if (name == "arcflags") {
+        ContractionHierarchyBuildResult built = build_contraction_hierarchy(graph);
+        dependency_stats.ch = built.stats;
+        PhastAlgorithm phast(built.hierarchy);
+        dependency_stats.wall_s = to_seconds(dependency_sw.wall_elapsed());
+        dependency_stats.cpu_s = to_seconds(dependency_sw.cpu_elapsed());
+        dependency_stats.peak_rss_mb = peak_rss_mb();
+        return std::make_unique<ArcFlagsAlgorithm>(graph, std::move(phast), uint16_t{32}, PartitionMethod::Inertial,
+                                                   uint32_t{1}, coords);
     }
-    timing_.dependency_wall_s = to_seconds(dependency_sw.wall_elapsed());
-    timing_.dependency_cpu_s = to_seconds(dependency_sw.cpu_elapsed());
-    timing_.after_dependency_peak_rss_mb = peak_rss_mb();
-
-    algorithm_ = build_algorithm();
-
-    Stopwatch algorithm_sw;
-    algorithm_->preprocess();
-    timing_.algorithm_wall_s = to_seconds(algorithm_sw.wall_elapsed());
-    timing_.algorithm_cpu_s = to_seconds(algorithm_sw.cpu_elapsed());
-    timing_.after_algorithm_peak_rss_mb = peak_rss_mb();
-
-    preprocessed_ = true;
+    if (name == "chase") {
+        ContractionHierarchyBuildResult built = build_contraction_hierarchy(graph);
+        dependency_stats.ch = built.stats;
+        dependency_stats.wall_s = to_seconds(dependency_sw.wall_elapsed());
+        dependency_stats.cpu_s = to_seconds(dependency_sw.cpu_elapsed());
+        dependency_stats.peak_rss_mb = peak_rss_mb();
+        return std::make_unique<ChaseAlgorithm>(graph, std::move(built.hierarchy), 0.05, uint16_t{64},
+                                                PartitionMethod::Inertial, coords);
+    }
+    if (name == "hl") {
+        ContractionHierarchyBuildResult built = build_contraction_hierarchy(graph);
+        dependency_stats.ch = built.stats;
+        dependency_stats.wall_s = to_seconds(dependency_sw.wall_elapsed());
+        dependency_stats.cpu_s = to_seconds(dependency_sw.cpu_elapsed());
+        dependency_stats.peak_rss_mb = peak_rss_mb();
+        return std::make_unique<HubLabelsAlgorithm>(graph, std::move(built.hierarchy));
+    }
+    throw std::invalid_argument("unsupported algorithm: " + name);
 }
+
+} // namespace
 
 RoutingInstance make_routing_instance(const std::string &name, const Graph &graph, std::span<const NodeCoord> coords) {
     if (!known_algorithm_names().contains(name)) {
@@ -116,7 +101,17 @@ RoutingInstance make_routing_instance(const std::string &name, const Graph &grap
     if (requires_coords(name)) {
         require_matching_coords(coords, graph.vertex_count(), "algorithm '" + name + "'");
     }
-    return RoutingInstance(graph, name, coords);
+
+    PreprocessReport report;
+    std::unique_ptr<RoutingAlgorithm> algorithm = build_algorithm(name, graph, coords, report.dependency);
+
+    Stopwatch algorithm_sw;
+    algorithm->preprocess();
+    report.algorithm.wall_s = to_seconds(algorithm_sw.wall_elapsed());
+    report.algorithm.cpu_s = to_seconds(algorithm_sw.cpu_elapsed());
+    report.algorithm.peak_rss_mb = peak_rss_mb();
+
+    return RoutingInstance{std::move(algorithm), report};
 }
 
 } // namespace transport

@@ -24,11 +24,11 @@ namespace {
 constexpr size_t kBatchSize = 8;
 } // namespace
 
-ArcFlagsAlgorithm::ArcFlagsAlgorithm(const Graph &graph, const PhastAlgorithm &phast, uint16_t regions,
+ArcFlagsAlgorithm::ArcFlagsAlgorithm(const Graph &graph, PhastAlgorithm &&phast, uint16_t regions,
                                      PartitionMethod partition_method, uint32_t threads,
                                      std::span<const NodeCoord> coords)
-    : graph_(graph), phast_(phast), regions_(regions), partition_method_(partition_method), threads_(threads),
-      coords_(coords), dist_(graph.vertex_count(), kUnreachable) {
+    : graph_(graph), phast_(std::move(phast)), regions_(regions), partition_method_(partition_method),
+      threads_(threads), coords_(coords), dist_(graph.vertex_count(), kUnreachable) {
     if (regions == 0 || regions > 64) {
         throw std::invalid_argument("arcflags: regions must be in [1, 64]");
     }

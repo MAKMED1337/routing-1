@@ -98,13 +98,12 @@ int main(int argc, char **argv) {
     std::optional<transport::RoutingInstance> instance;
     try {
         instance.emplace(transport::make_routing_instance(algo, graph, coords));
-        instance->preprocess();
     } catch (const std::exception &err) {
         std::cerr << err.what() << "\n";
         return 1;
     }
 
-    const transport::RoutingAlgorithm &algorithm = instance->algorithm();
+    const transport::RoutingAlgorithm &algorithm = *instance->algorithm;
     const transport::PathResult result = algorithm.query(source, target);
     std::cout << "algorithm=" << algorithm.name() << "\n";
     std::cout << "distance_units=" << result.distance_units << "\n";

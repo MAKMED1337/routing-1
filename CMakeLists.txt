@@ -58,7 +58,6 @@ add_library(transport_core
   src/graph/graph_io.cpp
   src/graph/reverse_graph.cpp
   src/algorithms/routing_instance.cpp
-  src/algorithms/routing_preprocessing_context.cpp
   src/algorithms/shortest_paths.cpp
 )
 target_compile_features(transport_core PUBLIC cxx_std_23)
@@ -114,9 +113,6 @@ if(BUILD_TESTING)
   add_executable(arcflags_tests tests/algorithms/arcflags/arc_flags_test.cpp)
   target_include_directories(arcflags_tests PRIVATE tests)
   target_link_libraries(arcflags_tests PRIVATE transport_core project_warnings)
-  add_executable(routing_preprocessing_context_tests tests/algorithms/routing_preprocessing_context_test.cpp)
-  target_include_directories(routing_preprocessing_context_tests PRIVATE tests)
-  target_link_libraries(routing_preprocessing_context_tests PRIVATE transport_core project_warnings)
 endif()
 
 add_executable(write_benchmark_graph src/apps/write_benchmark_graph.cpp)
@@ -142,5 +138,4 @@ if(BUILD_TESTING)
   add_test(NAME chase COMMAND chase_tests)
   add_test(NAME hl COMMAND hl_tests)
   add_test(NAME arcflags COMMAND arcflags_tests)
-  add_test(NAME routing_preprocessing_context COMMAND routing_preprocessing_context_tests)
 endif()
