@@ -30,7 +30,7 @@ int main(int argc, char **argv) {
             [&ch]() -> bench::Json {
                 const transport::PreprocessStats stats = ch.preprocess_stats();
                 return {
-                    {"ordering_init_wall_s", bench::to_seconds(stats.ordering_init_ns)},
+                    {"ordering_init_wall_s", bench::to_seconds(stats.ordering_init)},
                     {"ordering_note", "initial PQ scoring pass only; lazy re-scores and find_shortcuts are interleaved "
                                       "throughout the full contraction loop"},
                     {"witness_calls", stats.witness_calls},

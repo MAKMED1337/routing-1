@@ -21,7 +21,7 @@ struct DependencyPreprocessStats {
     // callers building multiple instances in one process (e.g. benchmark_main's A/B pair) will
     // see later instances' values include earlier instances' retained memory.
     double process_peak_rss_mb = 0.0;
-    std::optional<PreprocessStats> ch; // CH ordering_init_ns/witness_calls, when CH was built
+    std::optional<PreprocessStats> ch; // CH ordering_init/witness_calls, when CH was built
 };
 
 struct AlgorithmPreprocessStats {

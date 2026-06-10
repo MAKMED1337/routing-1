@@ -40,8 +40,8 @@ struct BenchmarkArgs {
 // Graph together with its load timing and post-load RSS, ready to hand to a RoutingAlgorithm constructor.
 struct LoadedGraph {
     Graph graph;
-    std::chrono::nanoseconds wall_ns{};
-    std::chrono::nanoseconds cpu_ns{};
+    std::chrono::nanoseconds wall{};
+    std::chrono::nanoseconds cpu{};
     uint64_t peak_rss_mb = 0;
 };
 
@@ -64,11 +64,11 @@ inline std::string current_datetime_iso() {
     return oss.str();
 }
 
-inline uint64_t percentile_ns(const std::vector<uint64_t> &sorted_ns, double pct) {
-    assert(!sorted_ns.empty());
+inline std::chrono::nanoseconds percentile(const std::vector<std::chrono::nanoseconds> &sorted, double pct) {
+    assert(!sorted.empty());
     const size_t idx =
-        std::min(static_cast<size_t>(static_cast<double>(sorted_ns.size()) * pct / 100.0), sorted_ns.size() - 1);
-    return sorted_ns[idx];
+        std::min(static_cast<size_t>(static_cast<double>(sorted.size()) * pct / 100.0), sorted.size() - 1);
+    return sorted[idx];
 }
 
 // --- main entry points ---
@@ -76,9 +76,9 @@ inline uint64_t percentile_ns(const std::vector<uint64_t> &sorted_ns, double pct
 inline LoadedGraph load_graph(const BenchmarkArgs &args) {
     const Stopwatch sw;
     Graph graph = transport::load_graph_binary(args.graph_path);
-    const std::chrono::nanoseconds wall_ns = sw.wall_elapsed();
-    const std::chrono::nanoseconds cpu_ns = sw.cpu_elapsed();
-    return LoadedGraph{std::move(graph), wall_ns, cpu_ns, peak_rss_mb()};
+    const std::chrono::nanoseconds wall = sw.wall_elapsed();
+    const std::chrono::nanoseconds cpu = sw.cpu_elapsed();
+    return LoadedGraph{std::move(graph), wall, cpu, peak_rss_mb()};
 }
 
 // Preprocesses `algo`, runs the query loop, and writes a complete JSON object to `out`.
@@ -97,25 +97,25 @@ inline void run_benchmark(const BenchmarkArgs &args, const LoadedGraph &loaded, 
 
     const Stopwatch pp_sw;
     algo.preprocess();
-    const std::chrono::nanoseconds pp_wall_ns = pp_sw.wall_elapsed();
-    const std::chrono::nanoseconds pp_cpu_ns = pp_sw.cpu_elapsed();
+    const std::chrono::nanoseconds pp_wall = pp_sw.wall_elapsed();
+    const std::chrono::nanoseconds pp_cpu = pp_sw.cpu_elapsed();
     const uint64_t after_preprocess_rss = peak_rss_mb();
 
     std::mt19937 rng(args.seed);
     std::uniform_int_distribution<VertexId> pick(0, loaded.graph.vertex_count() - 1);
 
-    std::vector<uint64_t> times;
+    std::vector<std::chrono::nanoseconds> times;
     times.reserve(args.query_count);
     for (uint32_t i = 0; i < args.query_count; ++i) {
         const VertexId src = pick(rng);
         const VertexId dst = pick(rng);
         const Stopwatch t;
         (void)algo.query(src, dst);
-        times.push_back(static_cast<uint64_t>(t.wall_elapsed().count()));
+        times.push_back(t.wall_elapsed());
     }
     std::sort(times.begin(), times.end());
-    const double mean_us = static_cast<double>(std::accumulate(times.begin(), times.end(), uint64_t{0})) /
-                           static_cast<double>(times.size()) / 1000.0;
+    const std::chrono::nanoseconds total = std::accumulate(times.begin(), times.end(), std::chrono::nanoseconds{0});
+    const double mean_us = to_microseconds(total) / static_cast<double>(times.size());
 
     Json graph_obj;
     graph_obj["path"] = args.graph_path;
@@ -130,11 +130,11 @@ inline void run_benchmark(const BenchmarkArgs &args, const LoadedGraph &loaded, 
     j["variant"] = variant;
     j["date"] = current_datetime_iso();
     j["graph"] = std::move(graph_obj);
-    j["load_wall_s"] = to_seconds(loaded.wall_ns);
-    j["load_cpu_s"] = to_seconds(loaded.cpu_ns);
+    j["load_wall_s"] = to_seconds(loaded.wall);
+    j["load_cpu_s"] = to_seconds(loaded.cpu);
     j["after_load_peak_rss_mb"] = loaded.peak_rss_mb;
-    j["preprocess_wall_s"] = to_seconds(pp_wall_ns);
-    j["preprocess_cpu_s"] = to_seconds(pp_cpu_ns);
+    j["preprocess_wall_s"] = to_seconds(pp_wall);
+    j["preprocess_cpu_s"] = to_seconds(pp_cpu);
     j["after_preprocess_peak_rss_mb"] = after_preprocess_rss;
     if (extra_fields) {
         const Json extra = extra_fields();
@@ -149,10 +149,10 @@ inline void run_benchmark(const BenchmarkArgs &args, const LoadedGraph &loaded, 
         {"count", args.query_count},
         {"seed", args.seed},
         {"mean_us", mean_us},
-        {"p50_us", to_microseconds(std::chrono::nanoseconds(percentile_ns(times, 50)))},
-        {"p95_us", to_microseconds(std::chrono::nanoseconds(percentile_ns(times, 95)))},
-        {"p99_us", to_microseconds(std::chrono::nanoseconds(percentile_ns(times, 99)))},
-        {"max_us", to_microseconds(std::chrono::nanoseconds(times.back()))},
+        {"p50_us", to_microseconds(percentile(times, 50))},
+        {"p95_us", to_microseconds(percentile(times, 95))},
+        {"p99_us", to_microseconds(percentile(times, 99))},
+        {"max_us", to_microseconds(times.back())},
     };
 
     out << j.dump(2) << "\n";

@@ -43,7 +43,7 @@ std::pair<std::vector<uint32_t>, PreprocessStats> contract_graph(WorkGraph &work
     for (VertexId v = 0; v < vertices; ++v) {
         pq.push(OrderEntry{edge_difference(work, v, witness, kWitnessHopLimit), v});
     }
-    const std::chrono::nanoseconds ordering_init_ns = std::chrono::steady_clock::now() - ordering_init_start;
+    const std::chrono::nanoseconds ordering_init = std::chrono::steady_clock::now() - ordering_init_start;
 
     uint32_t next_rank = 0;
     while (!pq.empty()) {
@@ -69,7 +69,7 @@ std::pair<std::vector<uint32_t>, PreprocessStats> contract_graph(WorkGraph &work
     }
 
     PreprocessStats stats;
-    stats.ordering_init_ns = ordering_init_ns;
+    stats.ordering_init = ordering_init;
     stats.witness_calls = witness.calls();
     return {rank, stats};
 }

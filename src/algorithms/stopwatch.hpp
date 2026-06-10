@@ -1,15 +1,20 @@
 #pragma once
 
 #include <sys/resource.h>
+#include <time.h>
 
 #include <chrono>
-#include <ctime>
 
 namespace transport {
 
+// Process CPU time so far (summed over all threads), as a chrono duration. std::chrono has no
+// CPU-time clock of its own, so the reading comes from the POSIX per-process CPU clock rather
+// than a chrono clock. CLOCK_PROCESS_CPUTIME_ID yields nanosecond resolution, unlike
+// std::clock()'s CLOCKS_PER_SEC (microsecond) scaling.
 inline std::chrono::nanoseconds process_cpu_now() {
-    using Ticks = std::chrono::duration<std::clock_t, std::ratio<1, CLOCKS_PER_SEC>>;
-    return std::chrono::duration_cast<std::chrono::nanoseconds>(Ticks(std::clock()));
+    timespec ts{};
+    clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &ts);
+    return std::chrono::seconds(ts.tv_sec) + std::chrono::nanoseconds(ts.tv_nsec);
 }
 
 // Process-wide peak resident set size so far, in megabytes. ru_maxrss is a monotonic
