@@ -1,12 +1,11 @@
-#include "algorithms/routing_algorithm.hpp"
-#include "algorithms/routing_algorithm_factory.hpp"
+#include "algorithms/routing_instance.hpp"
 #include "graph/graph_io.hpp"
 #include "routing/routing.hpp"
 
 #include <cstdint>
 #include <iostream>
 #include <limits>
-#include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -96,17 +95,17 @@ int main(int argc, char **argv) {
         coords = transport::load_coords_binary(coords_path);
     }
 
-    std::unique_ptr<transport::RoutingAlgorithm> algorithm;
+    std::optional<transport::RoutingInstance> instance;
     try {
-        algorithm = transport::make_routing_algorithm(algo, graph, coords);
-        algorithm->preprocess();
+        instance.emplace(transport::make_routing_instance(algo, graph, coords));
     } catch (const std::exception &err) {
         std::cerr << err.what() << "\n";
         return 1;
     }
 
-    const transport::PathResult result = algorithm->query(source, target);
-    std::cout << "algorithm=" << algorithm->name() << "\n";
+    const transport::RoutingAlgorithm &algorithm = *instance->algorithm;
+    const transport::PathResult result = algorithm.query(source, target);
+    std::cout << "algorithm=" << algorithm.name() << "\n";
     std::cout << "distance_units=" << result.distance_units << "\n";
     std::cout << "distance_scale=" << transport::kDistanceScale << "\n";
     std::cout << "distance_m="

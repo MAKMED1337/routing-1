@@ -28,15 +28,15 @@ namespace transport {
 //   Symmetric for L_b.
 class HubLabelsAlgorithm final : public RoutingAlgorithm {
 public:
-    explicit HubLabelsAlgorithm(const Graph &graph, double label_fraction = 0.25,
+    // Caller contract: `ch` must have been built from `graph` (same vertex set/ids). The
+    // constructor does not check this; a mismatched CH silently produces out-of-bounds reads
+    // or wrong routes.
+    explicit HubLabelsAlgorithm(const Graph &graph, ContractionHierarchy &&ch, double label_fraction = 0.25,
                                 uint64_t memory_budget_bytes = 18ULL * 1024 * 1024 * 1024);
 
     std::string_view name() const override;
     void preprocess() override;
     [[nodiscard]] PathResult query(VertexId source, VertexId target) const override;
-
-    void inject_ch(ContractionHierarchy ch);
-    [[nodiscard]] const ContractionHierarchy &get_ch() const { return ch_; }
 
     struct HlStats {
         double label_fraction = 0.0;
@@ -49,18 +49,16 @@ public:
         double label_build_wall_s = 0.0;
         double label_build_cpu_s = 0.0;
         uint64_t prune_drops = 0;
-        bool ch_was_injected = false;
     };
 
     [[nodiscard]] const HlStats &hl_stats() const { return stats_; }
 
 private:
     const Graph &graph_;
+    ContractionHierarchy ch_;
     double label_fraction_;
     uint64_t memory_budget_bytes_;
 
-    ContractionHierarchy ch_;
-    bool ch_provided_ = false;
     bool preprocessed_ = false;
 
     VertexId label_threshold_ = 0; // rank >= this → labeled

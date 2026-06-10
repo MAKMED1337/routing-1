@@ -1,9 +1,11 @@
+#include "algorithms/ch/contraction_hierarchy.hpp"
 #include "algorithms/chase/chase.hpp"
 #include "graph_fixtures.hpp"
 
 #include <iostream>
 #include <limits>
 #include <stdexcept>
+#include <utility>
 
 namespace {
 
@@ -12,7 +14,9 @@ bool check_chase_validation() {
     bool ok = true;
     for (const double core_fraction : {0.0, -0.1, 1.1, std::numeric_limits<double>::quiet_NaN()}) {
         try {
-            transport::ChaseAlgorithm chase(graph, core_fraction, 4, transport::PartitionMethod::Grid, {});
+            transport::ContractionHierarchyBuildResult built = transport::build_contraction_hierarchy(graph);
+            transport::ChaseAlgorithm chase(graph, std::move(built.hierarchy), core_fraction, 4,
+                                            transport::PartitionMethod::Grid, {});
             chase.preprocess();
             std::cerr << "chase: expected std::invalid_argument for core_fraction=" << core_fraction << "\n";
             ok = false;

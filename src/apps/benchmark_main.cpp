@@ -1,6 +1,7 @@
 #include "algorithms/ch/contraction_hierarchy.hpp"
 #include "algorithms/routing_algorithm.hpp"
-#include "algorithms/routing_algorithm_factory.hpp"
+#include "algorithms/routing_instance.hpp"
+#include "algorithms/stopwatch.hpp"
 #include "graph/graph_io.hpp"
 #include "routing/routing.hpp"
 
@@ -11,7 +12,7 @@
 #include <fstream>
 #include <iostream>
 #include <limits>
-#include <memory>
+#include <optional>
 #include <random>
 #include <stdexcept>
 #include <string>
@@ -22,7 +23,10 @@ namespace fs = std::filesystem;
 using transport::ContractionHierarchyAlgorithm;
 using transport::Graph;
 using transport::PathResult;
+using transport::PreprocessReport;
 using transport::RoutingAlgorithm;
+using transport::RoutingInstance;
+using transport::to_seconds;
 using transport::VertexId;
 
 namespace {
@@ -70,13 +74,6 @@ uint32_t parse_u32(std::string_view text, std::string_view key) {
     return static_cast<uint32_t>(parsed);
 }
 
-uint64_t preprocess_timed(RoutingAlgorithm &algorithm) {
-    const auto t0 = std::chrono::steady_clock::now();
-    algorithm.preprocess();
-    const auto t1 = std::chrono::steady_clock::now();
-    return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count());
-}
-
 TimedResult query_timed(const RoutingAlgorithm &algorithm, VertexId source, VertexId target) {
     const auto t0 = std::chrono::steady_clock::now();
     const PathResult result = algorithm.query(source, target);
@@ -87,9 +84,24 @@ TimedResult query_timed(const RoutingAlgorithm &algorithm, VertexId source, Vert
 
 bool same_distance(uint64_t a, uint64_t b) { return a == b; }
 
-void print_preprocessing_metrics(std::string_view prefix, const RoutingAlgorithm &algorithm, uint64_t preprocess_us) {
-    std::cout << prefix << "_preprocess_us=" << preprocess_us << "\n";
-    if (const auto *ch = dynamic_cast<const ContractionHierarchyAlgorithm *>(&algorithm)) {
+void print_preprocessing_metrics(std::string_view prefix, const RoutingInstance &instance) {
+    const PreprocessReport &report = instance.stats;
+    std::cout << prefix << "_dependency_preprocess_wall_s=" << report.dependency.wall_s << "\n";
+    std::cout << prefix << "_dependency_preprocess_cpu_s=" << report.dependency.cpu_s << "\n";
+    std::cout << prefix << "_algorithm_preprocess_wall_s=" << report.algorithm.wall_s << "\n";
+    std::cout << prefix << "_algorithm_preprocess_cpu_s=" << report.algorithm.cpu_s << "\n";
+    // Process-wide high-water RSS, not memory owned by this algorithm alone: this prints A then
+    // B, so algorithm_b's values include algorithm_a's retained memory.
+    std::cout << prefix << "_after_dependency_preprocess_process_peak_rss_mb=" << report.dependency.process_peak_rss_mb
+              << "\n";
+    std::cout << prefix << "_after_algorithm_preprocess_process_peak_rss_mb=" << report.algorithm.process_peak_rss_mb
+              << "\n";
+    if (report.dependency.ch) {
+        std::cout << prefix << "_dependency_ch_witness_calls=" << report.dependency.ch->witness_calls << "\n";
+        std::cout << prefix << "_dependency_ch_ordering_init_s=" << to_seconds(report.dependency.ch->ordering_init_ns)
+                  << "\n";
+    }
+    if (const auto *ch = dynamic_cast<const ContractionHierarchyAlgorithm *>(instance.algorithm.get())) {
         std::cout << prefix << "_auxiliary_edges=" << ch->auxiliary_edge_count() << "\n";
     }
 }
@@ -185,21 +197,19 @@ int main(int argc, char **argv) {
         coords = transport::load_coords_binary(coords_path);
     }
 
-    std::unique_ptr<RoutingAlgorithm> runner_a;
-    std::unique_ptr<RoutingAlgorithm> runner_b;
-    uint64_t algorithm_a_preprocess_us = 0;
-    uint64_t algorithm_b_preprocess_us = 0;
+    std::optional<RoutingInstance> instance_a;
+    std::optional<RoutingInstance> instance_b;
     try {
-        runner_a = transport::make_routing_algorithm(algorithm_a, graph, coords);
-        runner_b = transport::make_routing_algorithm(algorithm_b, graph, coords);
-        algorithm_a_preprocess_us = preprocess_timed(*runner_a);
-        algorithm_b_preprocess_us = preprocess_timed(*runner_b);
+        instance_a.emplace(transport::make_routing_instance(algorithm_a, graph, coords));
+        instance_b.emplace(transport::make_routing_instance(algorithm_b, graph, coords));
     } catch (const std::exception &err) {
         std::cerr << err.what() << "\n";
         return 1;
     }
-    print_preprocessing_metrics(runner_a->name(), *runner_a, algorithm_a_preprocess_us);
-    print_preprocessing_metrics(runner_b->name(), *runner_b, algorithm_b_preprocess_us);
+    const RoutingAlgorithm &runner_a_algo = *instance_a->algorithm;
+    const RoutingAlgorithm &runner_b_algo = *instance_b->algorithm;
+    print_preprocessing_metrics(runner_a_algo.name(), *instance_a);
+    print_preprocessing_metrics(runner_b_algo.name(), *instance_b);
 
     std::mt19937 rng(seed);
     std::uniform_int_distribution<VertexId> pick(0, graph.vertex_count() - 1);
@@ -232,8 +242,8 @@ int main(int argc, char **argv) {
             continue;
         }
 
-        const TimedResult a = query_timed(*runner_a, source, target);
-        const TimedResult b = query_timed(*runner_b, source, target);
+        const TimedResult a = query_timed(runner_a_algo, source, target);
+        const TimedResult b = query_timed(runner_b_algo, source, target);
 
         if (a.path.distance_units == transport::kUnreachable || a.path.settled < min_settled ||
             a.path.settled > max_settled) {
@@ -241,18 +251,19 @@ int main(int argc, char **argv) {
         }
         if (!same_distance(a.path.distance_units, b.path.distance_units)) {
             std::cerr << "distance mismatch for query source=" << source << " target=" << target
-                      << " algorithm_a=" << runner_a->name() << " distance=" << a.path.distance_units
-                      << " algorithm_b=" << runner_b->name() << " distance=" << b.path.distance_units << "\n";
+                      << " algorithm_a=" << runner_a_algo.name() << " distance=" << a.path.distance_units
+                      << " algorithm_b=" << runner_b_algo.name() << " distance=" << b.path.distance_units << "\n";
             return 2;
         }
 
-        write_benchmark_row(out, accepted, source, target,
-                            {TimedAlgorithmResult{runner_a->name(), a}, TimedAlgorithmResult{runner_b->name(), b}});
+        write_benchmark_row(
+            out, accepted, source, target,
+            {TimedAlgorithmResult{runner_a_algo.name(), a}, TimedAlgorithmResult{runner_b_algo.name(), b}});
         ++accepted;
     }
 
-    std::cout << "algorithm_a=" << runner_a->name() << "\n";
-    std::cout << "algorithm_b=" << runner_b->name() << "\n";
+    std::cout << "algorithm_a=" << runner_a_algo.name() << "\n";
+    std::cout << "algorithm_b=" << runner_b_algo.name() << "\n";
     std::cout << "accepted_queries=" << accepted << "\n";
     std::cout << "attempted_queries=" << attempts << "\n";
     std::cout << "output_csv=" << out_path << "\n";

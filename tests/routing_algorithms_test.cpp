@@ -41,6 +41,10 @@ bool check_all_algorithms(const transport::Graph &graph, std::span<const transpo
     bidijkstra.preprocess();
     ch.preprocess();
 
+    // Each CH-dependent algorithm now owns its dependency exclusively, so each gets its own
+    // PhastAlgorithm/ContractionHierarchy copied from `ch` (PhastAlgorithm's ctor and CH's copy
+    // ctor are cheap relative to rebuilding the CH from scratch per algorithm).
+
     // threads=1, threads=2, and threads=16 (more threads than work blocks on small graphs).
     transport::ArcFlagsAlgorithm af1(graph, transport::PhastAlgorithm(ch.get_ch()), 4, transport::PartitionMethod::Grid,
                                      1, coords);
@@ -53,12 +57,15 @@ bool check_all_algorithms(const transport::Graph &graph, std::span<const transpo
     af16.preprocess();
 
     // core_fraction=0.5 so even small graphs have a non-trivial core; Grid partition, 4 regions.
-    transport::ChaseAlgorithm chase(graph, 0.5, 4, transport::PartitionMethod::Grid, coords);
+    transport::ChaseAlgorithm chase(graph, transport::ContractionHierarchy(ch.get_ch()), 0.5, 4,
+                                    transport::PartitionMethod::Grid, coords);
     chase.preprocess();
 
     // full labels (label_fraction=1.0) and tiered labels (label_fraction=0.5).
-    transport::HubLabelsAlgorithm hl_full(graph, 1.0, 4ULL * 1024 * 1024 * 1024);
-    transport::HubLabelsAlgorithm hl_tiered(graph, 0.5, 4ULL * 1024 * 1024 * 1024);
+    transport::HubLabelsAlgorithm hl_full(graph, transport::ContractionHierarchy(ch.get_ch()), 1.0,
+                                          4ULL * 1024 * 1024 * 1024);
+    transport::HubLabelsAlgorithm hl_tiered(graph, transport::ContractionHierarchy(ch.get_ch()), 0.5,
+                                            4ULL * 1024 * 1024 * 1024);
     hl_full.preprocess();
     hl_tiered.preprocess();
 

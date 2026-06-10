@@ -30,6 +30,15 @@ public:
     [[nodiscard]] std::span<const Edge> backward_adjacent_edges(VertexId vertex) const;
 };
 
+struct ContractionHierarchyBuildResult {
+    ContractionHierarchy hierarchy;
+    PreprocessStats stats;
+};
+
+// Builds a contraction hierarchy from `graph`. This is the reusable entry point for sharing a
+// CH across multiple CH-dependent algorithms; ContractionHierarchyAlgorithm::preprocess() uses it.
+[[nodiscard]] ContractionHierarchyBuildResult build_contraction_hierarchy(const Graph &graph);
+
 class ContractionHierarchyAlgorithm final : public RoutingAlgorithm {
 public:
     explicit ContractionHierarchyAlgorithm(const Graph &graph);

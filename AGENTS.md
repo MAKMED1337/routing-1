@@ -72,6 +72,7 @@ behavior/policy file.
 - When using fixed-size bitmasks or region limits, document the constant and reject unsupported values rather than silently truncating.
 - For threaded algorithms, test at least single-threaded, multi-threaded, and more-threads-than-work-blocks cases when the implementation branches on thread count or partitions work.
 - If a new algorithm trades RAM for speed, expose or report its algorithm-owned memory in benchmarks or document the measurement gap in `NOTES.md`.
+- Algorithms must not construct expensive shared preprocessing artifacts (CH, PHAST) internally, except the algorithm whose purpose is building/querying that artifact. Inject prebuilt artifacts via constructors, moved in and owned by the algorithm (e.g. `ChaseAlgorithm(Graph, ContractionHierarchy&&, ...)`); do not add silent internal fallback construction. Benchmarks must report dependency preprocessing (CH/PHAST) and algorithm-specific preprocessing as separate timings.
 
 ## Tests
 

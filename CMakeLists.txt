@@ -57,7 +57,7 @@ add_library(transport_core
   src/graph/graph.cpp
   src/graph/graph_io.cpp
   src/graph/reverse_graph.cpp
-  src/algorithms/routing_algorithm_factory.cpp
+  src/algorithms/routing_instance.cpp
   src/algorithms/shortest_paths.cpp
 )
 target_compile_features(transport_core PUBLIC cxx_std_23)
@@ -92,8 +92,8 @@ if(BUILD_TESTING)
   target_link_libraries(reverse_graph_tests PRIVATE transport_core project_warnings)
   add_executable(transport_routing_tests tests/routing_algorithms_test.cpp)
   target_link_libraries(transport_routing_tests PRIVATE transport_core project_warnings)
-  add_executable(routing_algorithm_factory_tests tests/routing_algorithm_factory_test.cpp)
-  target_link_libraries(routing_algorithm_factory_tests PRIVATE transport_core project_warnings)
+  add_executable(routing_instance_tests tests/routing_instance_test.cpp)
+  target_link_libraries(routing_instance_tests PRIVATE transport_core project_warnings)
   add_executable(alt_tests tests/algorithms/alt/alt_test.cpp)
   target_include_directories(alt_tests PRIVATE tests)
   target_link_libraries(alt_tests PRIVATE transport_core project_warnings)
@@ -110,6 +110,9 @@ if(BUILD_TESTING)
   add_executable(hl_tests tests/algorithms/hl/hub_labels_test.cpp)
   target_include_directories(hl_tests PRIVATE tests)
   target_link_libraries(hl_tests PRIVATE transport_core project_warnings)
+  add_executable(arcflags_tests tests/algorithms/arcflags/arc_flags_test.cpp)
+  target_include_directories(arcflags_tests PRIVATE tests)
+  target_link_libraries(arcflags_tests PRIVATE transport_core project_warnings)
 endif()
 
 add_executable(write_benchmark_graph src/apps/write_benchmark_graph.cpp)
@@ -127,11 +130,12 @@ if(BUILD_TESTING)
   add_test(NAME reverse_graph COMMAND reverse_graph_tests)
   add_test(NAME query_help COMMAND transport_query --help)
   add_test(NAME routing_algorithms COMMAND transport_routing_tests)
-  add_test(NAME routing_algorithm_factory COMMAND routing_algorithm_factory_tests)
+  add_test(NAME routing_instance COMMAND routing_instance_tests)
   add_test(NAME alt COMMAND alt_tests)
   add_test(NAME astar_heuristics COMMAND astar_heuristics_tests)
   add_test(NAME partition COMMAND partition_tests)
   add_test(NAME phast COMMAND phast_tests)
   add_test(NAME chase COMMAND chase_tests)
   add_test(NAME hl COMMAND hl_tests)
+  add_test(NAME arcflags COMMAND arcflags_tests)
 endif()

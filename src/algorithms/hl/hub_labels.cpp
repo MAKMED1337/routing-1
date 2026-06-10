@@ -21,8 +21,9 @@ constexpr Distance saturating_add(Distance a, Distance b) { return a <= kUnreach
 
 } // namespace
 
-HubLabelsAlgorithm::HubLabelsAlgorithm(const Graph &graph, double label_fraction, uint64_t memory_budget_bytes)
-    : graph_(graph), label_fraction_(label_fraction), memory_budget_bytes_(memory_budget_bytes) {
+HubLabelsAlgorithm::HubLabelsAlgorithm(const Graph &graph, ContractionHierarchy &&ch, double label_fraction,
+                                       uint64_t memory_budget_bytes)
+    : graph_(graph), ch_(std::move(ch)), label_fraction_(label_fraction), memory_budget_bytes_(memory_budget_bytes) {
     if (label_fraction_ <= 0.0 || label_fraction_ > 1.0 || !std::isfinite(label_fraction_)) {
         throw std::invalid_argument("hl: label_fraction must be in (0, 1]");
     }
@@ -32,11 +33,6 @@ HubLabelsAlgorithm::HubLabelsAlgorithm(const Graph &graph, double label_fraction
 }
 
 std::string_view HubLabelsAlgorithm::name() const { return "hl"; }
-
-void HubLabelsAlgorithm::inject_ch(ContractionHierarchy ch) {
-    ch_ = std::move(ch);
-    ch_provided_ = true;
-}
 
 // ----- label intersection -----
 
@@ -64,13 +60,6 @@ void HubLabelsAlgorithm::preprocess() {
     if (preprocessed_) {
         return;
     }
-
-    if (!ch_provided_) {
-        ContractionHierarchyAlgorithm ch_algo(graph_);
-        ch_algo.preprocess();
-        ch_ = ch_algo.get_ch();
-    }
-    stats_.ch_was_injected = ch_provided_;
 
     const VertexId V = ch_.vertex_count();
     labeled_count_ = static_cast<VertexId>(static_cast<double>(V) * label_fraction_);
