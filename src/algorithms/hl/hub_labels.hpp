@@ -1,18 +1,14 @@
 #pragma once
 
 #include "algorithms/ch/contraction_hierarchy.hpp"
-#include "algorithms/heap_node.hpp"
 #include "algorithms/routing_algorithm.hpp"
 #include "algorithms/stamped_vector.hpp"
 #include "graph/graph.hpp"
 #include "graph/types.hpp"
 
 #include <cstdint>
-#include <functional>
-#include <queue>
 #include <span>
 #include <string_view>
-#include <unordered_map>
 #include <vector>
 
 namespace transport {
@@ -88,18 +84,9 @@ private:
 
     HlStats stats_;
 
-    using Pq = std::priority_queue<HeapNode, std::vector<HeapNode>, std::greater<HeapNode>>;
-
     // Scratch for query-time upward searches; resized to V in preprocess().
     mutable StampedVector<Distance> fwd_scratch_{1, kUnreachable};
     mutable StampedVector<Distance> bwd_scratch_{1, kUnreachable};
-    // Reusable per-query collect buffers (single-threaded queries). collect() drains
-    // pq_ fully on every call, so it returns empty and is safe to reuse as-is.
-    mutable std::vector<HlEntry> collect_buf_fwd_;
-    mutable std::vector<HlEntry> collect_buf_bwd_;
-    mutable std::unordered_map<VertexId, Distance> hub_best_;
-    mutable Pq pq_;
-    mutable std::vector<VertexId> unlabeled_settled_;
 
     [[nodiscard]] bool is_labeled(VertexId v) const { return ch_.rank[v] >= label_threshold_; }
 
@@ -116,14 +103,14 @@ private:
     void build_labels();
 
     // Dijkstra-style upward search from `start` over one CH direction (forward when
-    // `forward` is true, backward otherwise), writing into the matching member scratch
-    // (fwd_scratch_/bwd_scratch_) and output buffer (collect_buf_fwd_/collect_buf_bwd_).
-    // Stops expanding at each labeled vertex it settles and instead merges that vertex's
-    // label into the output buffer (sorted by hub, ready for intersect_labels). Unlabeled
-    // vertices it settles are expanded further and, when `unlabeled` is non-null, appended
-    // to it (used by query() to compute the mu_low CH fallback). Caller resets the matching
-    // scratch before and after calling. Returns the number of vertices settled.
-    uint32_t collect(VertexId start, bool forward, std::vector<VertexId> *unlabeled) const;
+    // `forward` is true, backward otherwise), using the matching member scratch
+    // (fwd_scratch_/bwd_scratch_). Stops expanding at each labeled vertex it settles and
+    // instead merges that vertex's label into `out` (sorted by hub, ready for
+    // intersect_labels). Unlabeled vertices it settles are expanded further and, when
+    // `unlabeled` is non-null, appended to it (used by query() to compute the mu_low CH
+    // fallback). Caller resets the matching scratch before and after calling. Returns the
+    // number of vertices settled.
+    uint32_t collect(VertexId start, bool forward, std::vector<HlEntry> &out, std::vector<VertexId> *unlabeled) const;
 };
 
 } // namespace transport
