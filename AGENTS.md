@@ -15,6 +15,8 @@ behavior/policy file.
 - Keep changes tightly scoped to the user request.
 - Prefer explicit, local code over broad wrappers.
 - Do not add compatibility layers unless explicitly requested.
+- Do not add "legacy" fallbacks or silent compatibility behavior unless explicitly requested.
+- Fail fast on invalid configuration, unsupported enum/string values, malformed files, and impossible states; do not silently clamp, rewrite, downgrade, or fall back to a slower algorithm.
 - If user feedback reflects a durable project rule, update this file.
 
 ## Project structure
@@ -43,6 +45,13 @@ behavior/policy file.
 - Always use braces `{}` for `if`, `for`, `while`, and `do` bodies, even single-statement ones.
 - Prefer `std::string_view` over `const char *` for read-only string values.
 - Prefer early-exit style: `if (cond) return;` / `if (cond) continue;` over nested if-else blocks.
+- Use the standard library for simple comparisons and math (`std::min`, `std::max`, `std::clamp`, `std::hypot`, `std::numeric_limits`) instead of hand-written equivalents.
+- Avoid cast-heavy code. Pick parameter, storage, and return types that match the domain and limits up front.
+- Use `size_t` for vector indexes, sizes, and CSR offsets in memory. Convert to fixed-width types only at serialization boundaries.
+- Use `Distance` for distances, priorities derived from distances, and unreachable sentinels; use `VertexId` for graph vertex identities; use `size_t` only when a value is purely an index/count.
+- Prefer existing adjacency/span helpers such as `Graph::adjacent_edges()` and reverse-graph equivalents over manual `offsets`/`edges` indexing in algorithms.
+- Keep non-template implementation details in `.cpp` files. Put code in headers only when templates, inline trivial accessors, or API shape require it.
+- Avoid unused parameters, redundant state, and low-value aliases. If a value can be cheaply constructed locally, keep it local instead of storing it for reuse.
 - Run `clang-format` on modified C++ files before finalizing changes:
   - `rg --files src tests | rg '\\.(cpp|hpp|h)$' | xargs clang-format -i`
 
@@ -54,6 +63,24 @@ behavior/policy file.
 - Validate correctness by comparing algorithm result distances.
 - Benchmarks must use fixed seeds for reproducibility.
 - Do not claim speedups without reporting exact benchmark settings.
+- Keep hot query paths allocation-conscious. Avoid per-query heap allocations when reusable scratch storage or pre-reserved members are justified by measurable cost.
+- Preprocessing-dependent algorithms must throw clearly if `query()` is called before `preprocess()`. Do not silently run as Dijkstra or with empty preprocessing data.
+- Factory construction must be cheap and must not hide preprocessing work. Expensive CH/PHAST/label/flag builds belong in `preprocess()` so benchmark timings and RSS accounting stay meaningful.
+- Prefer constructor arguments and dependency injection for algorithm dependencies (heuristics, RNGs, prebuilt landmark sets, CH/PHAST helpers) over hard-coded behavior or post-construction injection methods.
+- Keep algorithm parameters strongly typed. Use enums internally instead of strings; parse strings only at CLI/config boundaries.
+- Validate public numeric parameters before using them in arithmetic or casts, especially fractions, thread counts, region counts, memory budgets, and sentinel values.
+- When using fixed-size bitmasks or region limits, document the constant and reject unsupported values rather than silently truncating.
+- For threaded algorithms, test at least single-threaded, multi-threaded, and more-threads-than-work-blocks cases when the implementation branches on thread count or partitions work.
+- If a new algorithm trades RAM for speed, expose or report its algorithm-owned memory in benchmarks or document the measurement gap in `NOTES.md`.
+
+## Tests
+
+- Keep `tests/routing_algorithms_test.cpp` focused on broad all-pairs distance correctness against Dijkstra.
+- Put algorithm-specific tests under dedicated files/directories such as `tests/algorithms/<name>/`.
+- Put heuristic-specific tests in their own files, not in generic routing correctness tests.
+- Reuse shared test helpers (`tests/routing_test_utils.hpp`) and graph fixtures (`tests/graph_fixtures.hpp`) instead of duplicating small graph builders inline.
+- Prefer tests that exercise real edge cases from the algorithm: disconnected graphs, asymmetric directed graphs, `source == target`, invalid configuration, missing preprocessing, and parameter-boundary cases.
+- Avoid redundant tests already covered by `check_all_pairs` or other shared helpers unless the test asserts a distinct contract.
 
 ## Data handling
 
@@ -61,6 +88,9 @@ behavior/policy file.
 - Keep metadata with source file size, vertex count, edge count, and import time.
 - Do not mutate raw map input files in place.
 - Fail fast on malformed graph or unsupported data.
+- Keep core graph types separate from external concerns. Binary I/O belongs in graph I/O modules; geometry/coordinate helpers belong outside the core `Graph` type.
+- Check every binary read/write operation, including headers and counts. Truncated files must throw instead of producing empty or partially valid objects.
+- Use structured parsers/libraries for nontrivial file formats and CLI parsing instead of ad hoc string parsing.
 
 ## Validation
 
@@ -99,3 +129,4 @@ Every benchmark run writes a JSON file to `results/`. Rules:
 - If the user asks to only plan, do not perform implementation edits.
 - If asked to implement, carry through code, build checks, and a concise result summary.
 - If environment constraints block a requested step, report the exact blocker.
+- Commit messages must follow the existing prefix style: `feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`, etc. Use a short imperative subject after the prefix.

@@ -7,70 +7,18 @@
 #include "algorithms/chase/chase.hpp"
 #include "algorithms/hl/hub_labels.hpp"
 #include "algorithms/phast.hpp"
-#include "graph/graph_io.hpp"
 #include "graph/reverse_graph.hpp"
 #include "graph_fixtures.hpp"
 #include "routing_test_utils.hpp"
 
-#include <filesystem>
 #include <iostream>
 #include <random>
 #include <span>
-#include <stdexcept>
 #include <vector>
 
 namespace {
 
 using transport::test::check_all_pairs;
-
-transport::Graph make_invalid_offsets_graph() {
-    transport::Graph graph;
-    graph.vertex_count_ = 2;
-    graph.offsets = {0, 2, 1};
-    graph.edges.push_back(transport::Edge{
-        .to = 1,
-        .weight = 100,
-    });
-    return graph;
-}
-
-transport::Graph make_invalid_edge_destination_graph() {
-    transport::Graph graph;
-    graph.vertex_count_ = 2;
-    graph.offsets = {0, 1, 1};
-    graph.edges.push_back(transport::Edge{
-        .to = 5,
-        .weight = 100,
-    });
-    return graph;
-}
-
-bool expect_load_failure(const std::filesystem::path &path) {
-    try {
-        (void)transport::load_graph_binary(path.string());
-    } catch (const std::runtime_error &) {
-        return true;
-    }
-    std::cerr << "expected malformed graph load failure for " << path << "\n";
-    return false;
-}
-
-bool check_malformed_graph_files_fail_fast() {
-    const std::filesystem::path dir = std::filesystem::temp_directory_path();
-    const std::filesystem::path invalid_offsets = dir / "transport_invalid_offsets.graph";
-    const std::filesystem::path invalid_edge = dir / "transport_invalid_edge.graph";
-
-    if (!transport::save_graph_binary(make_invalid_offsets_graph(), invalid_offsets.string()) ||
-        !transport::save_graph_binary(make_invalid_edge_destination_graph(), invalid_edge.string())) {
-        std::cerr << "failed to write malformed graph fixtures\n";
-        return false;
-    }
-
-    const bool ok = expect_load_failure(invalid_offsets) && expect_load_failure(invalid_edge);
-    std::filesystem::remove(invalid_offsets);
-    std::filesystem::remove(invalid_edge);
-    return ok;
-}
 
 bool check_all_algorithms(const transport::Graph &graph, std::span<const transport::NodeCoord> coords = {}) {
     std::vector<transport::NodeCoord> zero_coords;
@@ -132,7 +80,6 @@ int main() {
         const transport::test::GraphWithCoords grid = transport::test::make_grid_graph(4, 4);
         ok &= check_all_algorithms(grid.graph, grid.coords);
     }
-    ok &= check_malformed_graph_files_fail_fast();
     if (!ok) {
         std::cerr << "routing algorithm tests FAILED\n";
         return 1;

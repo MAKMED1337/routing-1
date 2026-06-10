@@ -115,15 +115,21 @@ Graph load_graph_binary(const std::string &path) {
     }
 
     uint32_t magic = 0;
-    read_one(in, magic);
+    if (!read_one(in, magic)) {
+        throw std::runtime_error("corrupted graph file: failed to read magic");
+    }
     if (magic != kMagicIntWeights) {
         throw std::runtime_error("invalid graph file magic");
     }
 
     uint32_t vertices = 0;
     uint64_t edges = 0;
-    read_one(in, vertices);
-    read_one(in, edges);
+    if (!read_one(in, vertices)) {
+        throw std::runtime_error("corrupted graph file: failed to read vertex count");
+    }
+    if (!read_one(in, edges)) {
+        throw std::runtime_error("corrupted graph file: failed to read edge count");
+    }
 
     Graph graph;
     graph.vertex_count_ = vertices;

@@ -1,9 +1,11 @@
 #include "graph/graph_io.hpp"
 #include "routing_test_utils.hpp"
 
+#include <cstdint>
 #include <cstdio>
 #include <filesystem>
 #include <iostream>
+#include <stdexcept>
 #include <vector>
 
 namespace {
@@ -74,12 +76,83 @@ bool check_coords_save_load_round_trip() {
     return true;
 }
 
+bool expect_graph_load_failure(const std::filesystem::path &path) {
+    try {
+        (void)transport::load_graph_binary(path.string());
+    } catch (const std::runtime_error &) {
+        return true;
+    }
+    std::cerr << "graph: expected load failure for " << path << "\n";
+    return false;
+}
+
+bool check_truncated_graph_headers_fail_fast() {
+    const transport::Graph graph = transport::test::make_graph(1, {{}});
+    const std::filesystem::path dir = std::filesystem::temp_directory_path();
+    const std::filesystem::path empty_path = dir / "transport_empty_header.graph";
+    const std::filesystem::path magic_only_path = dir / "transport_magic_only.graph";
+
+    if (!transport::save_graph_binary(graph, empty_path.string()) ||
+        !transport::save_graph_binary(graph, magic_only_path.string())) {
+        std::cerr << "graph: failed to save truncation fixtures\n";
+        return false;
+    }
+    std::filesystem::resize_file(empty_path, 0);
+    std::filesystem::resize_file(magic_only_path, sizeof(uint32_t));
+
+    const bool ok = expect_graph_load_failure(empty_path) && expect_graph_load_failure(magic_only_path);
+    std::filesystem::remove(empty_path);
+    std::filesystem::remove(magic_only_path);
+    return ok;
+}
+
+transport::Graph make_invalid_offsets_graph() {
+    transport::Graph graph;
+    graph.vertex_count_ = 2;
+    graph.offsets = {0, 2, 1};
+    graph.edges.push_back(transport::Edge{
+        .to = 1,
+        .weight = 100,
+    });
+    return graph;
+}
+
+transport::Graph make_invalid_edge_destination_graph() {
+    transport::Graph graph;
+    graph.vertex_count_ = 2;
+    graph.offsets = {0, 1, 1};
+    graph.edges.push_back(transport::Edge{
+        .to = 5,
+        .weight = 100,
+    });
+    return graph;
+}
+
+bool check_malformed_graph_files_fail_fast() {
+    const std::filesystem::path dir = std::filesystem::temp_directory_path();
+    const std::filesystem::path invalid_offsets = dir / "transport_invalid_offsets.graph";
+    const std::filesystem::path invalid_edge = dir / "transport_invalid_edge.graph";
+
+    if (!transport::save_graph_binary(make_invalid_offsets_graph(), invalid_offsets.string()) ||
+        !transport::save_graph_binary(make_invalid_edge_destination_graph(), invalid_edge.string())) {
+        std::cerr << "graph: failed to write malformed graph fixtures\n";
+        return false;
+    }
+
+    const bool ok = expect_graph_load_failure(invalid_offsets) && expect_graph_load_failure(invalid_edge);
+    std::filesystem::remove(invalid_offsets);
+    std::filesystem::remove(invalid_edge);
+    return ok;
+}
+
 } // namespace
 
 int main() {
     bool ok = true;
     ok &= check_save_load_round_trip();
     ok &= check_coords_save_load_round_trip();
+    ok &= check_truncated_graph_headers_fail_fast();
+    ok &= check_malformed_graph_files_fail_fast();
     if (!ok) {
         std::cerr << "graph io tests FAILED\n";
         return 1;

@@ -50,7 +50,7 @@ private:
     ContractionHierarchy ch_;
     bool preprocessed_ = false;
 
-    uint32_t core_threshold_; // rank >= core_threshold_ => vertex is in core; set at construction
+    VertexId core_threshold_; // rank >= core_threshold_ => vertex is in core; set at construction
 
     // Core-forward and core-backward CSRs (upward arcs both in the core).
     std::vector<size_t> cf_offsets_;
