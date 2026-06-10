@@ -66,8 +66,8 @@ std::unique_ptr<RoutingAlgorithm> build_algorithm(const std::string &name, const
         ContractionHierarchyBuildResult built = build_contraction_hierarchy(graph);
         dependency_stats.ch = built.stats;
         PhastAlgorithm phast(built.hierarchy);
-        dependency_stats.wall_s = to_seconds(dependency_sw.wall_elapsed());
-        dependency_stats.cpu_s = to_seconds(dependency_sw.cpu_elapsed());
+        dependency_stats.wall = dependency_sw.wall_elapsed();
+        dependency_stats.cpu = dependency_sw.cpu_elapsed();
         dependency_stats.process_peak_rss_mb = peak_rss_mb();
         return std::make_unique<ArcFlagsAlgorithm>(graph, std::move(phast), uint16_t{32}, PartitionMethod::Inertial,
                                                    uint32_t{1}, coords);
@@ -75,8 +75,8 @@ std::unique_ptr<RoutingAlgorithm> build_algorithm(const std::string &name, const
     if (name == "chase") {
         ContractionHierarchyBuildResult built = build_contraction_hierarchy(graph);
         dependency_stats.ch = built.stats;
-        dependency_stats.wall_s = to_seconds(dependency_sw.wall_elapsed());
-        dependency_stats.cpu_s = to_seconds(dependency_sw.cpu_elapsed());
+        dependency_stats.wall = dependency_sw.wall_elapsed();
+        dependency_stats.cpu = dependency_sw.cpu_elapsed();
         dependency_stats.process_peak_rss_mb = peak_rss_mb();
         return std::make_unique<ChaseAlgorithm>(graph, std::move(built.hierarchy), 0.05, uint16_t{64},
                                                 PartitionMethod::Inertial, coords);
@@ -84,8 +84,8 @@ std::unique_ptr<RoutingAlgorithm> build_algorithm(const std::string &name, const
     if (name == "hl") {
         ContractionHierarchyBuildResult built = build_contraction_hierarchy(graph);
         dependency_stats.ch = built.stats;
-        dependency_stats.wall_s = to_seconds(dependency_sw.wall_elapsed());
-        dependency_stats.cpu_s = to_seconds(dependency_sw.cpu_elapsed());
+        dependency_stats.wall = dependency_sw.wall_elapsed();
+        dependency_stats.cpu = dependency_sw.cpu_elapsed();
         dependency_stats.process_peak_rss_mb = peak_rss_mb();
         return std::make_unique<HubLabelsAlgorithm>(graph, std::move(built.hierarchy));
     }
@@ -107,8 +107,8 @@ RoutingInstance make_routing_instance(const std::string &name, const Graph &grap
 
     Stopwatch algorithm_sw;
     algorithm->preprocess();
-    report.algorithm.wall_s = to_seconds(algorithm_sw.wall_elapsed());
-    report.algorithm.cpu_s = to_seconds(algorithm_sw.cpu_elapsed());
+    report.algorithm.wall = algorithm_sw.wall_elapsed();
+    report.algorithm.cpu = algorithm_sw.cpu_elapsed();
     report.algorithm.process_peak_rss_mb = peak_rss_mb();
 
     return RoutingInstance{std::move(algorithm), report};

@@ -2,6 +2,7 @@
 #include "graph_fixtures.hpp"
 #include "routing_test_utils.hpp"
 
+#include <chrono>
 #include <iostream>
 #include <stdexcept>
 #include <vector>
@@ -65,8 +66,8 @@ bool check_dependency_preprocessing_runs_for_ch_dependent_algorithms() {
 
     for (const std::string &algo : {std::string("arcflags"), std::string("chase"), std::string("hl")}) {
         transport::RoutingInstance instance = transport::make_routing_instance(algo, graph, coords);
-        if (instance.stats.dependency.wall_s < 0.0) {
-            std::cerr << "instance: expected non-negative dependency wall_s for '" << algo << "'\n";
+        if (instance.stats.dependency.wall < std::chrono::nanoseconds::zero()) {
+            std::cerr << "instance: expected non-negative dependency wall time for '" << algo << "'\n";
             return false;
         }
         if (!instance.stats.dependency.ch.has_value()) {

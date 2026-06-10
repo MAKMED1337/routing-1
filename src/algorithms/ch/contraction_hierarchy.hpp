@@ -13,7 +13,7 @@
 namespace transport {
 
 struct PreprocessStats {
-    std::chrono::nanoseconds ordering_init_ns{0};
+    std::chrono::nanoseconds ordering_init{0};
     uint64_t witness_calls = 0;
 };
 

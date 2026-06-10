@@ -5,6 +5,7 @@
 #include "graph/geometry.hpp"
 #include "graph/graph.hpp"
 
+#include <chrono>
 #include <memory>
 #include <optional>
 #include <span>
@@ -13,19 +14,19 @@
 namespace transport {
 
 struct DependencyPreprocessStats {
-    double wall_s = 0.0;
-    double cpu_s = 0.0;
+    std::chrono::nanoseconds wall{0};
+    std::chrono::nanoseconds cpu{0};
     // Process-wide high-water RSS sampled right after this phase, not memory owned by this
     // dependency alone. In make_routing_instance() this is the only allocation so far, but
     // callers building multiple instances in one process (e.g. benchmark_main's A/B pair) will
     // see later instances' values include earlier instances' retained memory.
     double process_peak_rss_mb = 0.0;
-    std::optional<PreprocessStats> ch; // CH ordering_init_ns/witness_calls, when CH was built
+    std::optional<PreprocessStats> ch; // CH ordering_init/witness_calls, when CH was built
 };
 
 struct AlgorithmPreprocessStats {
-    double wall_s = 0.0;
-    double cpu_s = 0.0;
+    std::chrono::nanoseconds wall{0};
+    std::chrono::nanoseconds cpu{0};
     // Process-wide high-water RSS sampled right after this phase; see DependencyPreprocessStats
     // for the same multi-instance caveat.
     double process_peak_rss_mb = 0.0;

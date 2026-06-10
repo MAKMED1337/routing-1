@@ -27,6 +27,7 @@ using transport::PathResult;
 using transport::PreprocessReport;
 using transport::RoutingAlgorithm;
 using transport::RoutingInstance;
+using transport::Stopwatch;
 using transport::to_seconds;
 using transport::VertexId;
 
@@ -34,39 +35,37 @@ namespace {
 
 struct TimedResult {
     PathResult path;
-    uint64_t query_us = 0;
+    std::chrono::nanoseconds query_wall{};
+    std::chrono::nanoseconds query_cpu{};
 };
 
 TimedResult query_timed(const RoutingAlgorithm &algorithm, VertexId source, VertexId target) {
-    const auto t0 = std::chrono::steady_clock::now();
+    const Stopwatch sw;
     const PathResult result = algorithm.query(source, target);
-    const auto t1 = std::chrono::steady_clock::now();
-    return TimedResult{result,
-                       static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count())};
+    return TimedResult{result, sw.wall_elapsed(), sw.cpu_elapsed()};
 }
 
-void print_preprocessing_metrics(std::string_view prefix, const RoutingInstance &instance) {
-    const PreprocessReport &report = instance.stats;
-    std::cout << prefix << "_dependency_preprocess_wall_s=" << report.dependency.wall_s << "\n";
-    std::cout << prefix << "_dependency_preprocess_cpu_s=" << report.dependency.cpu_s << "\n";
-    std::cout << prefix << "_algorithm_preprocess_wall_s=" << report.algorithm.wall_s << "\n";
-    std::cout << prefix << "_algorithm_preprocess_cpu_s=" << report.algorithm.cpu_s << "\n";
-    std::cout << prefix << "_after_dependency_preprocess_process_peak_rss_mb=" << report.dependency.process_peak_rss_mb
-              << "\n";
-    std::cout << prefix << "_after_algorithm_preprocess_process_peak_rss_mb=" << report.algorithm.process_peak_rss_mb
-              << "\n";
+bench::Json preprocess_to_json(const PreprocessReport &report, const RoutingAlgorithm &algorithm) {
+    bench::Json j;
+    j["dependency_wall_s"] = to_seconds(report.dependency.wall);
+    j["dependency_cpu_s"] = to_seconds(report.dependency.cpu);
+    j["after_dependency_peak_rss_mb"] = report.dependency.process_peak_rss_mb;
     if (report.dependency.ch) {
-        std::cout << prefix << "_dependency_ch_witness_calls=" << report.dependency.ch->witness_calls << "\n";
-        std::cout << prefix << "_dependency_ch_ordering_init_s=" << to_seconds(report.dependency.ch->ordering_init_ns)
-                  << "\n";
+        j["dependency_ch_ordering_init_s"] = to_seconds(report.dependency.ch->ordering_init);
+        j["dependency_ch_witness_calls"] = report.dependency.ch->witness_calls;
     }
-    if (const auto *ch = dynamic_cast<const ContractionHierarchyAlgorithm *>(instance.algorithm.get())) {
-        std::cout << prefix << "_auxiliary_edges=" << ch->auxiliary_edge_count() << "\n";
+    j["algorithm_wall_s"] = to_seconds(report.algorithm.wall);
+    j["algorithm_cpu_s"] = to_seconds(report.algorithm.cpu);
+    j["after_algorithm_peak_rss_mb"] = report.algorithm.process_peak_rss_mb;
+    if (const auto *ch = dynamic_cast<const ContractionHierarchyAlgorithm *>(&algorithm)) {
+        j["auxiliary_edges"] = ch->auxiliary_edge_count();
     }
+    return j;
 }
 
 struct QueryAggregateInput {
-    std::vector<uint64_t> query_us;
+    std::vector<std::chrono::nanoseconds> query_wall;
+    std::vector<std::chrono::nanoseconds> query_cpu;
     std::vector<uint32_t> settled;
     std::vector<uint64_t> relaxed_arcs;
     std::vector<uint64_t> heap_pushes;
@@ -90,14 +89,42 @@ template <typename T> double percentile_of(std::vector<T> v, double pct) {
     return static_cast<double>(v[idx]);
 }
 
+double mean_us(const std::vector<std::chrono::nanoseconds> &v) {
+    if (v.empty()) {
+        return 0.0;
+    }
+    const std::chrono::nanoseconds total = std::accumulate(v.begin(), v.end(), std::chrono::nanoseconds{0});
+    return bench::to_microseconds(total) / static_cast<double>(v.size());
+}
+
+double percentile_us(std::vector<std::chrono::nanoseconds> v, double pct) {
+    if (v.empty()) {
+        return 0.0;
+    }
+    std::sort(v.begin(), v.end());
+    const size_t idx = std::min(static_cast<size_t>(static_cast<double>(v.size()) * pct / 100.0), v.size() - 1);
+    return bench::to_microseconds(v[idx]);
+}
+
+double max_us(const std::vector<std::chrono::nanoseconds> &v) {
+    if (v.empty()) {
+        return 0.0;
+    }
+    return bench::to_microseconds(*std::max_element(v.begin(), v.end()));
+}
+
 bench::Json aggregate_to_json(QueryAggregateInput &agg) {
     bench::Json j;
-    j["mean_us"] = mean_of(agg.query_us);
-    j["p50_us"] = percentile_of(agg.query_us, 50.0);
-    j["p95_us"] = percentile_of(agg.query_us, 95.0);
-    j["p99_us"] = percentile_of(agg.query_us, 99.0);
-    j["max_us"] =
-        agg.query_us.empty() ? 0.0 : static_cast<double>(*std::max_element(agg.query_us.begin(), agg.query_us.end()));
+    j["mean_wall_us"] = mean_us(agg.query_wall);
+    j["p50_wall_us"] = percentile_us(agg.query_wall, 50.0);
+    j["p95_wall_us"] = percentile_us(agg.query_wall, 95.0);
+    j["p99_wall_us"] = percentile_us(agg.query_wall, 99.0);
+    j["max_wall_us"] = max_us(agg.query_wall);
+    j["mean_cpu_us"] = mean_us(agg.query_cpu);
+    j["p50_cpu_us"] = percentile_us(agg.query_cpu, 50.0);
+    j["p95_cpu_us"] = percentile_us(agg.query_cpu, 95.0);
+    j["p99_cpu_us"] = percentile_us(agg.query_cpu, 99.0);
+    j["max_cpu_us"] = max_us(agg.query_cpu);
     j["mean_settled"] = mean_of(agg.settled);
     j["p50_settled"] = percentile_of(agg.settled, 50.0);
     j["p95_settled"] = percentile_of(agg.settled, 95.0);
@@ -113,6 +140,7 @@ bench::Json aggregate_to_json(QueryAggregateInput &agg) {
 int main(int argc, char **argv) {
     std::string graph_path;
     std::string coords_path;
+    std::string source_path;
     std::string out_path = "reports/benchmarks/results.json";
     std::string algorithm_a = "dijkstra";
     std::string algorithm_b = "ch";
@@ -124,6 +152,7 @@ int main(int argc, char **argv) {
     CLI::App app{"Compare two routing algorithms on sampled graph queries"};
     app.add_option("--graph", graph_path, "Path to graph binary")->required()->check(CLI::ExistingFile);
     app.add_option("--coords", coords_path, "Path to coordinates binary")->check(CLI::ExistingFile);
+    app.add_option("--source", source_path, "Original source file path (e.g. OSM PBF) for benchmark metadata");
     app.add_option("--out", out_path, "Output JSON path")->default_val("reports/benchmarks/results.json");
     app.add_option("--queries", queries, "Accepted query count")->default_val(10'000)->check(CLI::PositiveNumber);
     app.add_option("--min-settled", min_settled, "Minimum settled vertices for accepted baseline queries")
@@ -154,6 +183,8 @@ int main(int argc, char **argv) {
         std::cerr << "graph must contain at least one vertex\n";
         return 1;
     }
+    const double after_load_rss = transport::peak_rss_mb();
+
     std::vector<transport::NodeCoord> coords;
     if (!coords_path.empty()) {
         coords = transport::load_coords_binary(coords_path);
@@ -170,8 +201,6 @@ int main(int argc, char **argv) {
     }
     const RoutingAlgorithm &runner_a_algo = *instance_a->algorithm;
     const RoutingAlgorithm &runner_b_algo = *instance_b->algorithm;
-    print_preprocessing_metrics(runner_a_algo.name(), *instance_a);
-    print_preprocessing_metrics(runner_b_algo.name(), *instance_b);
 
     std::mt19937 rng(seed);
     std::uniform_int_distribution<VertexId> pick(0, graph.vertex_count() - 1);
@@ -212,14 +241,16 @@ int main(int argc, char **argv) {
             return 2;
         }
 
-        agg_a.query_us.push_back(a.query_us);
+        agg_a.query_wall.push_back(a.query_wall);
+        agg_a.query_cpu.push_back(a.query_cpu);
         agg_a.settled.push_back(a.path.stats.settled);
         agg_a.relaxed_arcs.push_back(a.path.stats.relaxed_arcs);
         agg_a.heap_pushes.push_back(a.path.stats.heap_pushes);
         agg_a.heuristic_evals.push_back(a.path.stats.heuristic_evals);
         agg_a.pruned_by_flag.push_back(a.path.stats.pruned_by_flag);
 
-        agg_b.query_us.push_back(b.query_us);
+        agg_b.query_wall.push_back(b.query_wall);
+        agg_b.query_cpu.push_back(b.query_cpu);
         agg_b.settled.push_back(b.path.stats.settled);
         agg_b.relaxed_arcs.push_back(b.path.stats.relaxed_arcs);
         agg_b.heap_pushes.push_back(b.path.stats.heap_pushes);
@@ -229,17 +260,27 @@ int main(int argc, char **argv) {
         ++accepted;
     }
 
+    bench::Json graph_obj;
+    graph_obj["path"] = graph_path;
+    if (!source_path.empty()) {
+        graph_obj["source"] = source_path;
+    }
+    graph_obj["vertices"] = graph.vertex_count();
+    graph_obj["directed_edges"] = graph.edge_count();
+
     bench::Json j;
     j["algorithm_a"] = runner_a_algo.name();
     j["algorithm_b"] = runner_b_algo.name();
     j["date"] = bench::current_datetime_iso();
-    j["graph"] =
-        bench::Json{{"path", graph_path}, {"vertices", graph.vertex_count()}, {"directed_edges", graph.edge_count()}};
+    j["graph"] = std::move(graph_obj);
     j["distance_scale"] = transport::kDistanceScale;
+    j["after_load_peak_rss_mb"] = after_load_rss;
     j["filters"] = bench::Json{{"min_settled", min_settled}, {"max_settled", max_settled}};
     j["preprocessing"] = bench::Json{
-        {"algorithm_a_wall_s", instance_a->stats.dependency.wall_s + instance_a->stats.algorithm.wall_s},
-        {"algorithm_b_wall_s", instance_b->stats.dependency.wall_s + instance_b->stats.algorithm.wall_s},
+        {"algorithm_a", preprocess_to_json(instance_a->stats, runner_a_algo)},
+        {"algorithm_b", preprocess_to_json(instance_b->stats, runner_b_algo)},
+        {"rss_note", "after_*_peak_rss_mb values are process-wide high-water marks; algorithm_b RSS includes "
+                     "algorithm_a's retained memory"},
     };
     j["queries"] = bench::Json{
         {"requested", queries},
