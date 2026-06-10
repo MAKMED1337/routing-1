@@ -25,6 +25,9 @@ namespace transport {
 // build CH/PHAST itself.
 class ArcFlagsAlgorithm final : public RoutingAlgorithm {
 public:
+    // Caller contract: `phast` must have been built from `graph` (same vertex set/ids). The
+    // constructor does not check this; a mismatched PHAST silently produces out-of-bounds reads
+    // or wrong routes.
     explicit ArcFlagsAlgorithm(const Graph &graph, PhastAlgorithm &&phast, uint16_t regions = 32,
                                PartitionMethod partition_method = PartitionMethod::Inertial, uint32_t threads = 1,
                                std::span<const NodeCoord> coords = {});

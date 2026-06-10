@@ -90,8 +90,12 @@ void print_preprocessing_metrics(std::string_view prefix, const RoutingInstance 
     std::cout << prefix << "_dependency_preprocess_cpu_s=" << report.dependency.cpu_s << "\n";
     std::cout << prefix << "_algorithm_preprocess_wall_s=" << report.algorithm.wall_s << "\n";
     std::cout << prefix << "_algorithm_preprocess_cpu_s=" << report.algorithm.cpu_s << "\n";
-    std::cout << prefix << "_after_dependency_preprocess_peak_rss_mb=" << report.dependency.peak_rss_mb << "\n";
-    std::cout << prefix << "_after_algorithm_preprocess_peak_rss_mb=" << report.algorithm.peak_rss_mb << "\n";
+    // Process-wide high-water RSS, not memory owned by this algorithm alone: this prints A then
+    // B, so algorithm_b's values include algorithm_a's retained memory.
+    std::cout << prefix << "_after_dependency_preprocess_process_peak_rss_mb=" << report.dependency.process_peak_rss_mb
+              << "\n";
+    std::cout << prefix << "_after_algorithm_preprocess_process_peak_rss_mb=" << report.algorithm.process_peak_rss_mb
+              << "\n";
     if (report.dependency.ch) {
         std::cout << prefix << "_dependency_ch_witness_calls=" << report.dependency.ch->witness_calls << "\n";
         std::cout << prefix << "_dependency_ch_ordering_init_s=" << to_seconds(report.dependency.ch->ordering_init_ns)

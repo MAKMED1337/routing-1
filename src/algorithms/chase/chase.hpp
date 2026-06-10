@@ -33,6 +33,9 @@ namespace transport {
 // so no shortest-path arc is ever wrongly pruned.
 class ChaseAlgorithm final : public RoutingAlgorithm {
 public:
+    // Caller contract: `ch` must have been built from `graph` (same vertex set/ids). The
+    // constructor does not check this; a mismatched CH silently produces out-of-bounds reads
+    // or wrong routes.
     explicit ChaseAlgorithm(const Graph &graph, ContractionHierarchy &&ch, double core_fraction = 0.05,
                             uint16_t regions = 64, PartitionMethod partition_method = PartitionMethod::Inertial,
                             std::span<const NodeCoord> coords = {});

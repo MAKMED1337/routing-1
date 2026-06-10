@@ -68,7 +68,7 @@ std::unique_ptr<RoutingAlgorithm> build_algorithm(const std::string &name, const
         PhastAlgorithm phast(built.hierarchy);
         dependency_stats.wall_s = to_seconds(dependency_sw.wall_elapsed());
         dependency_stats.cpu_s = to_seconds(dependency_sw.cpu_elapsed());
-        dependency_stats.peak_rss_mb = peak_rss_mb();
+        dependency_stats.process_peak_rss_mb = peak_rss_mb();
         return std::make_unique<ArcFlagsAlgorithm>(graph, std::move(phast), uint16_t{32}, PartitionMethod::Inertial,
                                                    uint32_t{1}, coords);
     }
@@ -77,7 +77,7 @@ std::unique_ptr<RoutingAlgorithm> build_algorithm(const std::string &name, const
         dependency_stats.ch = built.stats;
         dependency_stats.wall_s = to_seconds(dependency_sw.wall_elapsed());
         dependency_stats.cpu_s = to_seconds(dependency_sw.cpu_elapsed());
-        dependency_stats.peak_rss_mb = peak_rss_mb();
+        dependency_stats.process_peak_rss_mb = peak_rss_mb();
         return std::make_unique<ChaseAlgorithm>(graph, std::move(built.hierarchy), 0.05, uint16_t{64},
                                                 PartitionMethod::Inertial, coords);
     }
@@ -86,7 +86,7 @@ std::unique_ptr<RoutingAlgorithm> build_algorithm(const std::string &name, const
         dependency_stats.ch = built.stats;
         dependency_stats.wall_s = to_seconds(dependency_sw.wall_elapsed());
         dependency_stats.cpu_s = to_seconds(dependency_sw.cpu_elapsed());
-        dependency_stats.peak_rss_mb = peak_rss_mb();
+        dependency_stats.process_peak_rss_mb = peak_rss_mb();
         return std::make_unique<HubLabelsAlgorithm>(graph, std::move(built.hierarchy));
     }
     throw std::invalid_argument("unsupported algorithm: " + name);
@@ -109,7 +109,7 @@ RoutingInstance make_routing_instance(const std::string &name, const Graph &grap
     algorithm->preprocess();
     report.algorithm.wall_s = to_seconds(algorithm_sw.wall_elapsed());
     report.algorithm.cpu_s = to_seconds(algorithm_sw.cpu_elapsed());
-    report.algorithm.peak_rss_mb = peak_rss_mb();
+    report.algorithm.process_peak_rss_mb = peak_rss_mb();
 
     return RoutingInstance{std::move(algorithm), report};
 }

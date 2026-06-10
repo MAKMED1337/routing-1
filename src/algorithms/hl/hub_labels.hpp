@@ -28,6 +28,9 @@ namespace transport {
 //   Symmetric for L_b.
 class HubLabelsAlgorithm final : public RoutingAlgorithm {
 public:
+    // Caller contract: `ch` must have been built from `graph` (same vertex set/ids). The
+    // constructor does not check this; a mismatched CH silently produces out-of-bounds reads
+    // or wrong routes.
     explicit HubLabelsAlgorithm(const Graph &graph, ContractionHierarchy &&ch, double label_fraction = 0.25,
                                 uint64_t memory_budget_bytes = 18ULL * 1024 * 1024 * 1024);
 
