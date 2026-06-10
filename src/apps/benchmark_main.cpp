@@ -196,8 +196,8 @@ int main(int argc, char **argv) {
         std::cerr << err.what() << "\n";
         return 1;
     }
-    RoutingAlgorithm &runner_a_algo = instance_a->algorithm();
-    RoutingAlgorithm &runner_b_algo = instance_b->algorithm();
+    const RoutingAlgorithm &runner_a_algo = instance_a->algorithm();
+    const RoutingAlgorithm &runner_b_algo = instance_b->algorithm();
     print_preprocessing_metrics(runner_a_algo.name(), *instance_a);
     print_preprocessing_metrics(runner_b_algo.name(), *instance_b);
 

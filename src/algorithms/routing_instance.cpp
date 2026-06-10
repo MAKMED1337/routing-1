@@ -43,13 +43,6 @@ bool requires_coords(const std::string &name) {
 RoutingInstance::RoutingInstance(const Graph &graph, std::string algorithm_name, std::span<const NodeCoord> coords)
     : graph_(graph), algorithm_name_(std::move(algorithm_name)), coords_(coords), context_(graph) {}
 
-RoutingAlgorithm &RoutingInstance::algorithm() {
-    if (!algorithm_) {
-        throw std::logic_error("RoutingInstance::preprocess() must be called before algorithm()");
-    }
-    return *algorithm_;
-}
-
 const RoutingAlgorithm &RoutingInstance::algorithm() const {
     if (!algorithm_) {
         throw std::logic_error("RoutingInstance::preprocess() must be called before algorithm()");

@@ -8,10 +8,20 @@
 
 namespace transport {
 
-// Owns expensive preprocessing artifacts (CH, PHAST) shared across CH-dependent algorithms
-// (arc flags, CHASE, hub labels) so they are built once and injected rather than rebuilt by
-// each algorithm. build_ch()/build_phast() are explicit and idempotent; accessors throw if the
-// corresponding artifact has not been built.
+// Without this context, each CH-dependent algorithm (arc flags, CHASE, hub labels) built its
+// own ContractionHierarchy/PhastAlgorithm internally, so running several of them against the
+// same graph paid for CH/PHAST construction once per algorithm and hid that cost inside each
+// algorithm's preprocess() timing. RoutingPreprocessingContext builds CH/PHAST once, owns them
+// for the lifetime of a RoutingInstance, and lets callers inject const references into
+// algorithm constructors instead.
+//
+// CH and PHAST are the only two artifacts here because they are the only ones any current
+// algorithm needs to share. If a future algorithm needs a different shared artifact, add a
+// matching std::optional<T> member plus a build_t()/t() pair following the same idempotent
+// build + throwing-accessor pattern, rather than growing CH/PHAST to serve unrelated needs.
+//
+// build_ch()/build_phast() are explicit and idempotent (calling either twice does not rebuild);
+// accessors throw if the corresponding artifact has not been built.
 class RoutingPreprocessingContext {
 public:
     explicit RoutingPreprocessingContext(const Graph &graph);

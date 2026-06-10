@@ -31,6 +31,11 @@ public:
     explicit HubLabelsAlgorithm(const Graph &graph, const ContractionHierarchy &ch, double label_fraction = 0.25,
                                 uint64_t memory_budget_bytes = 18ULL * 1024 * 1024 * 1024);
 
+    // ch_ stores a reference to the argument above, so binding it to a temporary would leave a
+    // dangling reference as soon as the constructor returns. Reject that at compile time.
+    HubLabelsAlgorithm(const Graph &graph, ContractionHierarchy &&ch, double label_fraction = 0.25,
+                       uint64_t memory_budget_bytes = 18ULL * 1024 * 1024 * 1024) = delete;
+
     std::string_view name() const override;
     void preprocess() override;
     [[nodiscard]] PathResult query(VertexId source, VertexId target) const override;
@@ -52,7 +57,7 @@ public:
 
 private:
     const Graph &graph_;
-    ContractionHierarchy ch_;
+    const ContractionHierarchy &ch_;
     double label_fraction_;
     uint64_t memory_budget_bytes_;
 

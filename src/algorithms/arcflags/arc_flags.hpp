@@ -29,6 +29,12 @@ public:
                                PartitionMethod partition_method = PartitionMethod::Inertial, uint32_t threads = 1,
                                std::span<const NodeCoord> coords = {});
 
+    // phast_ stores a reference to the argument above, so binding it to a temporary would
+    // leave a dangling reference as soon as the constructor returns. Reject that at compile time.
+    ArcFlagsAlgorithm(const Graph &graph, PhastAlgorithm &&phast, uint16_t regions = 32,
+                      PartitionMethod partition_method = PartitionMethod::Inertial, uint32_t threads = 1,
+                      std::span<const NodeCoord> coords = {}) = delete;
+
     std::string_view name() const override;
     void preprocess() override;
     [[nodiscard]] PathResult query(VertexId source, VertexId target) const override;

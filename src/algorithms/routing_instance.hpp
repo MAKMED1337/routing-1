@@ -11,7 +11,13 @@
 
 namespace transport {
 
-// Owns a graph-bound preprocessing context plus the constructed RoutingAlgorithm.
+// Replaces the old make_routing_algorithm() factory, which returned a bare
+// unique_ptr<RoutingAlgorithm> and left each CH-dependent algorithm to build its own CH/PHAST.
+// RoutingInstance is what callers (transport_query, transport_benchmark, tests) construct
+// instead: it owns both the RoutingPreprocessingContext (CH/PHAST, built once and shared) and
+// the RoutingAlgorithm built on top of it, so the two stay paired and the algorithm's
+// const-reference dependencies remain valid for the instance's lifetime.
+//
 // make_routing_instance() construction is cheap: it validates arguments but builds no expensive
 // artifacts. preprocess() sequences dependency-artifact construction (CH/PHAST, timed
 // separately as "dependency" cost) before constructing and preprocessing the algorithm itself
@@ -22,7 +28,6 @@ public:
 
     void preprocess();
 
-    [[nodiscard]] RoutingAlgorithm &algorithm();
     [[nodiscard]] const RoutingAlgorithm &algorithm() const;
 
     [[nodiscard]] const RoutingPreprocessingContext &context() const { return context_; }
