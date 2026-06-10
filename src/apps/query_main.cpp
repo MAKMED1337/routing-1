@@ -12,7 +12,7 @@
 int main(int argc, char **argv) {
     if (argc == 2 && std::string(argv[1]) == "--help") {
         std::cout << "usage: transport_query --graph <graph.bin> --source <id> --target <id> --algorithm "
-                     "dijkstra|astar|alt|bidijkstra|bidi_astar|ch|arcflags|chase\n";
+                     "dijkstra|astar|alt|bidijkstra|bidi_astar|ch|arcflags|chase|hl\n";
         return 0;
     }
 

@@ -47,6 +47,7 @@ add_library(transport_core
   src/algorithms/ch/work_graph.cpp
   src/algorithms/arcflags/arc_flags.cpp
   src/algorithms/chase/chase.cpp
+  src/algorithms/hl/hub_labels.cpp
   src/algorithms/bidirectional_astar.cpp
   src/algorithms/bidirectional_dijkstra.cpp
   src/algorithms/dijkstra.cpp
@@ -95,6 +96,9 @@ if(BUILD_TESTING)
   add_executable(phast_tests tests/algorithms/phast_test.cpp)
   target_include_directories(phast_tests PRIVATE tests)
   target_link_libraries(phast_tests PRIVATE transport_core project_warnings)
+  add_executable(hl_tests tests/algorithms/hl/hub_labels_test.cpp)
+  target_include_directories(hl_tests PRIVATE tests)
+  target_link_libraries(hl_tests PRIVATE transport_core project_warnings)
 endif()
 
 add_executable(write_benchmark_graph src/apps/write_benchmark_graph.cpp)
@@ -114,4 +118,5 @@ if(BUILD_TESTING)
   add_test(NAME astar_heuristics COMMAND astar_heuristics_tests)
   add_test(NAME partition COMMAND partition_tests)
   add_test(NAME phast COMMAND phast_tests)
+  add_test(NAME hl COMMAND hl_tests)
 endif()
