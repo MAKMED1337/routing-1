@@ -1,5 +1,6 @@
 #pragma once
 
+#include "graph/geometry.hpp"
 #include "graph/graph.hpp"
 #include "routing_test_utils.hpp"
 
@@ -7,6 +8,13 @@
 #include <vector>
 
 namespace transport::test {
+
+// Pairs a graph with the external coordinates needed by geometry-dependent algorithms
+// (A*, ALT planar, grid/inertial partitioning), since Graph itself no longer stores them.
+struct GraphWithCoords {
+    Graph graph;
+    std::vector<NodeCoord> coords;
+};
 
 // --- Graphs used by routing algorithm correctness tests ---
 
@@ -40,6 +48,15 @@ inline Graph make_asymmetric_graph() {
                              /*3*/ {{5, 1}},
                              /*4*/ {{3, 1}},
                              /*5*/ {{1, 50}},
+                         });
+}
+
+// 3-vertex directed chain: 0→1→2.
+inline Graph make_short_chain_graph() {
+    return make_graph(3, {
+                             /*0*/ {{1, 1}},
+                             /*1*/ {{2, 1}},
+                             /*2*/ {},
                          });
 }
 
@@ -81,27 +98,28 @@ inline Graph make_symmetric_graph() {
 
 // 4-vertex symmetric ring with geographic coordinates spread over a small lat/lon box.
 // Suitable for grid and inertial partitioning tests.
-inline Graph make_coord_graph() {
+inline GraphWithCoords make_coord_graph() {
     Graph graph;
-    graph.coords = {
-        {.lat = 10.0, .lon = 20.0},
-        {.lat = 10.0, .lon = 21.0},
-        {.lat = 11.0, .lon = 21.0},
-        {.lat = 11.0, .lon = 20.0},
-    };
+    graph.vertex_count_ = 4;
     // Symmetric ring: 0→1, 1→2, 2→3, 3→0 and back-edges.
     graph.offsets = {0, 2, 4, 6, 8};
     graph.edges = {
         {.to = 1, .weight = 1}, {.to = 3, .weight = 1}, {.to = 0, .weight = 1}, {.to = 2, .weight = 1},
         {.to = 1, .weight = 1}, {.to = 3, .weight = 1}, {.to = 0, .weight = 1}, {.to = 2, .weight = 1},
     };
-    return graph;
+    std::vector<NodeCoord> coords = {
+        {.lat = 10.0, .lon = 20.0},
+        {.lat = 10.0, .lon = 21.0},
+        {.lat = 11.0, .lon = 21.0},
+        {.lat = 11.0, .lon = 20.0},
+    };
+    return GraphWithCoords{.graph = std::move(graph), .coords = std::move(coords)};
 }
 
 // --- Graphs used by A* heuristic tests ---
 
 // rows×cols grid graph with unit-step edges and coordinates set to (row, col).
-inline Graph make_grid_graph(uint32_t rows, uint32_t cols) {
+inline GraphWithCoords make_grid_graph(uint32_t rows, uint32_t cols) {
     constexpr Weight kStepCost = 10;
     const uint32_t vertices = rows * cols;
     std::vector<std::vector<Edge>> edges(vertices);
@@ -127,12 +145,13 @@ inline Graph make_grid_graph(uint32_t rows, uint32_t cols) {
     }
 
     Graph graph = make_graph(vertices, edges);
+    std::vector<NodeCoord> coords(vertices);
     for (uint32_t row = 0; row < rows; ++row) {
         for (uint32_t col = 0; col < cols; ++col) {
-            graph.coords[vertex(row, col)] = {static_cast<double>(row), static_cast<double>(col)};
+            coords[vertex(row, col)] = {static_cast<double>(row), static_cast<double>(col)};
         }
     }
-    return graph;
+    return GraphWithCoords{.graph = std::move(graph), .coords = std::move(coords)};
 }
 
 } // namespace transport::test

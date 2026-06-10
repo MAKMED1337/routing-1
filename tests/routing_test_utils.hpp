@@ -7,14 +7,25 @@
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
+#include <stdexcept>
 #include <string_view>
 #include <vector>
 
 namespace transport::test {
 
+template <typename Fn> bool expect_throws(Fn &&fn, std::string_view message) {
+    try {
+        fn();
+    } catch (const std::invalid_argument &) {
+        return true;
+    }
+    std::cerr << message << "\n";
+    return false;
+}
+
 inline Graph make_graph(uint32_t vertices, const std::vector<std::vector<Edge>> &rows) {
     Graph graph;
-    graph.coords.resize(vertices);
+    graph.vertex_count_ = vertices;
     graph.offsets.assign(static_cast<size_t>(vertices) + 1, 0);
     for (uint32_t v = 0; v < vertices; ++v) {
         graph.offsets[v + 1] = graph.offsets[v] + rows[v].size();

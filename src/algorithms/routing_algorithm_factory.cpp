@@ -12,18 +12,23 @@
 
 #include <cmath>
 #include <memory>
+#include <span>
 #include <stdexcept>
 #include <string>
 
 namespace transport {
 
-std::unique_ptr<RoutingAlgorithm> make_routing_algorithm(const std::string &name, const Graph &graph) {
+std::unique_ptr<RoutingAlgorithm> make_routing_algorithm(const std::string &name, const Graph &graph,
+                                                         std::span<const NodeCoord> coords) {
     if (name == "dijkstra") {
         return std::make_unique<DijkstraAlgorithm>(graph);
     }
-    auto haversine_heuristic = [&graph](VertexId from, VertexId to) -> Distance {
+    if (name == "astar" || name == "bidi_astar" || name == "arcflags" || name == "chase") {
+        require_matching_coords(coords, graph.vertex_count(), "algorithm '" + name + "'");
+    }
+    auto haversine_heuristic = [coords](VertexId from, VertexId to) -> Distance {
         return static_cast<Distance>(
-            std::floor(haversine_meters(graph.coords[from], graph.coords[to]) * static_cast<double>(kDistanceScale)));
+            std::floor(haversine_meters(coords[from], coords[to]) * static_cast<double>(kDistanceScale)));
     };
     if (name == "astar") {
         return std::make_unique<AStarAlgorithm>(graph, haversine_heuristic);
@@ -41,10 +46,10 @@ std::unique_ptr<RoutingAlgorithm> make_routing_algorithm(const std::string &name
         return std::make_unique<ContractionHierarchyAlgorithm>(graph);
     }
     if (name == "arcflags") {
-        return std::make_unique<ArcFlagsAlgorithm>(graph);
+        return std::make_unique<ArcFlagsAlgorithm>(graph, uint16_t{32}, PartitionMethod::Inertial, uint32_t{1}, coords);
     }
     if (name == "chase") {
-        return std::make_unique<ChaseAlgorithm>(graph);
+        return std::make_unique<ChaseAlgorithm>(graph, 0.05, uint16_t{64}, PartitionMethod::Inertial, coords);
     }
     if (name == "hl") {
         return std::make_unique<HubLabelsAlgorithm>(graph);

@@ -5,17 +5,11 @@
 #include <cstddef>
 #include <cstdint>
 #include <span>
-#include <string>
 #include <vector>
 
 namespace transport {
 
 constexpr uint32_t kDistanceScale = 1000;
-
-struct NodeCoord {
-    double lat = 0.0;
-    double lon = 0.0;
-};
 
 struct Edge {
     VertexId to = 0;
@@ -24,7 +18,7 @@ struct Edge {
 
 class Graph {
 public:
-    std::vector<NodeCoord> coords;
+    VertexId vertex_count_ = 0;
     std::vector<size_t> offsets;
     std::vector<Edge> edges;
 
@@ -32,10 +26,5 @@ public:
     [[nodiscard]] uint64_t edge_count() const;
     [[nodiscard]] std::span<const Edge> adjacent_edges(VertexId vertex) const;
 };
-
-[[nodiscard]] bool save_graph_binary(const Graph &graph, const std::string &path);
-[[nodiscard]] Graph load_graph_binary(const std::string &path);
-
-double haversine_meters(const NodeCoord &a, const NodeCoord &b);
 
 } // namespace transport

@@ -8,6 +8,7 @@
 #include "graph/types.hpp"
 
 #include <cstdint>
+#include <span>
 #include <vector>
 
 namespace transport {
@@ -33,7 +34,8 @@ namespace transport {
 class ChaseAlgorithm final : public RoutingAlgorithm {
 public:
     explicit ChaseAlgorithm(const Graph &graph, double core_fraction = 0.05, uint16_t regions = 64,
-                            PartitionMethod partition_method = PartitionMethod::Inertial);
+                            PartitionMethod partition_method = PartitionMethod::Inertial,
+                            std::span<const NodeCoord> coords = {});
 
     std::string_view name() const override;
     void preprocess() override;
@@ -43,6 +45,7 @@ private:
     const Graph &graph_;
     uint16_t regions_;
     PartitionMethod partition_method_;
+    std::span<const NodeCoord> coords_;
 
     ContractionHierarchy ch_;
     bool preprocessed_ = false;

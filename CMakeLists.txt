@@ -53,7 +53,9 @@ add_library(transport_core
   src/algorithms/dijkstra.cpp
   src/algorithms/partition.cpp
   src/algorithms/phast.cpp
+  src/graph/geometry.cpp
   src/graph/graph.cpp
+  src/graph/graph_io.cpp
   src/graph/reverse_graph.cpp
   src/algorithms/routing_algorithm_factory.cpp
   src/algorithms/shortest_paths.cpp
@@ -84,8 +86,14 @@ add_executable(transport_benchmark src/apps/benchmark_main.cpp)
 target_link_libraries(transport_benchmark PRIVATE transport_core project_warnings)
 
 if(BUILD_TESTING)
+  add_executable(graph_io_tests tests/graph_io_test.cpp)
+  target_link_libraries(graph_io_tests PRIVATE transport_core project_warnings)
+  add_executable(reverse_graph_tests tests/reverse_graph_test.cpp)
+  target_link_libraries(reverse_graph_tests PRIVATE transport_core project_warnings)
   add_executable(transport_routing_tests tests/routing_algorithms_test.cpp)
   target_link_libraries(transport_routing_tests PRIVATE transport_core project_warnings)
+  add_executable(routing_algorithm_factory_tests tests/routing_algorithm_factory_test.cpp)
+  target_link_libraries(routing_algorithm_factory_tests PRIVATE transport_core project_warnings)
   add_executable(alt_tests tests/algorithms/alt/alt_test.cpp)
   target_include_directories(alt_tests PRIVATE tests)
   target_link_libraries(alt_tests PRIVATE transport_core project_warnings)
@@ -112,8 +120,11 @@ add_executable(ch_measure src/apps/ch_measure_main.cpp)
 target_link_libraries(ch_measure PRIVATE bench_harness)
 
 if(BUILD_TESTING)
+  add_test(NAME graph_io COMMAND graph_io_tests)
+  add_test(NAME reverse_graph COMMAND reverse_graph_tests)
   add_test(NAME query_help COMMAND transport_query --help)
   add_test(NAME routing_algorithms COMMAND transport_routing_tests)
+  add_test(NAME routing_algorithm_factory COMMAND routing_algorithm_factory_tests)
   add_test(NAME alt COMMAND alt_tests)
   add_test(NAME astar_heuristics COMMAND astar_heuristics_tests)
   add_test(NAME partition COMMAND partition_tests)

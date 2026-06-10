@@ -1,6 +1,6 @@
 #include "algorithms/routing_algorithm.hpp"
 #include "algorithms/routing_algorithm_factory.hpp"
-#include "graph/graph.hpp"
+#include "graph/graph_io.hpp"
 #include "routing/routing.hpp"
 
 #include <cstdint>
@@ -8,15 +8,17 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 int main(int argc, char **argv) {
     if (argc == 2 && std::string(argv[1]) == "--help") {
         std::cout << "usage: transport_query --graph <graph.bin> --source <id> --target <id> --algorithm "
-                     "dijkstra|astar|alt|bidijkstra|bidi_astar|ch|arcflags|chase|hl\n";
+                     "dijkstra|astar|alt|bidijkstra|bidi_astar|ch|arcflags|chase|hl [--coords <coords.bin>]\n";
         return 0;
     }
 
     std::string graph_path;
+    std::string coords_path;
     uint32_t source = 0;
     uint32_t target = 0;
     std::string algo = "dijkstra";
@@ -26,6 +28,9 @@ int main(int argc, char **argv) {
         const std::string value = argv[i + 1];
         if (key == "--graph") {
             graph_path = value;
+            ++i;
+        } else if (key == "--coords") {
+            coords_path = value;
             ++i;
         } else if (key == "--source") {
             source = static_cast<uint32_t>(std::stoul(value));
@@ -50,9 +55,14 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    std::vector<transport::NodeCoord> coords;
+    if (!coords_path.empty()) {
+        coords = transport::load_coords_binary(coords_path);
+    }
+
     std::unique_ptr<transport::RoutingAlgorithm> algorithm;
     try {
-        algorithm = transport::make_routing_algorithm(algo, graph);
+        algorithm = transport::make_routing_algorithm(algo, graph, coords);
         algorithm->preprocess();
     } catch (const std::invalid_argument &err) {
         std::cerr << err.what() << "\n";

@@ -7,13 +7,15 @@
 #include "algorithms/chase/chase.hpp"
 #include "algorithms/hl/hub_labels.hpp"
 #include "algorithms/phast.hpp"
-#include "graph/graph.hpp"
+#include "graph/graph_io.hpp"
+#include "graph/reverse_graph.hpp"
 #include "graph_fixtures.hpp"
 #include "routing_test_utils.hpp"
 
 #include <filesystem>
 #include <iostream>
 #include <random>
+#include <span>
 #include <stdexcept>
 #include <vector>
 
@@ -23,7 +25,7 @@ using transport::test::check_all_pairs;
 
 transport::Graph make_invalid_offsets_graph() {
     transport::Graph graph;
-    graph.coords.resize(2);
+    graph.vertex_count_ = 2;
     graph.offsets = {0, 2, 1};
     graph.edges.push_back(transport::Edge{
         .to = 1,
@@ -34,7 +36,7 @@ transport::Graph make_invalid_offsets_graph() {
 
 transport::Graph make_invalid_edge_destination_graph() {
     transport::Graph graph;
-    graph.coords.resize(2);
+    graph.vertex_count_ = 2;
     graph.offsets = {0, 1, 1};
     graph.edges.push_back(transport::Edge{
         .to = 5,
@@ -70,31 +72,40 @@ bool check_malformed_graph_files_fail_fast() {
     return ok;
 }
 
-bool check_all_algorithms(const transport::Graph &graph) {
+bool check_all_algorithms(const transport::Graph &graph, std::span<const transport::NodeCoord> coords = {}) {
+    std::vector<transport::NodeCoord> zero_coords;
+    if (coords.empty()) {
+        zero_coords.assign(graph.vertex_count(), transport::NodeCoord{});
+        coords = zero_coords;
+    }
+
     auto zero_heuristic = [](transport::VertexId, transport::VertexId) -> transport::Distance { return 0; };
     transport::AStarAlgorithm astar(graph, zero_heuristic);
-    transport::AltAlgorithm alt(graph, 4, transport::alt::LandmarkStrategy::Farthest, 2, std::mt19937{1});
+    std::mt19937 alt_rng{1};
+    const transport::Graph reverse = transport::build_reverse_graph(graph);
+    transport::alt::LandmarkSet alt_landmarks =
+        transport::alt::build_landmarks(graph, reverse, 4, transport::alt::LandmarkStrategy::Farthest, alt_rng);
+    transport::AltAlgorithm alt(graph, std::move(alt_landmarks), 2);
     transport::BidirectionalAStarAlgorithm bidi_astar(graph, zero_heuristic);
     transport::BidirectionalDijkstraAlgorithm bidijkstra(graph);
     transport::ContractionHierarchyAlgorithm ch(graph);
-    alt.preprocess();
     bidi_astar.preprocess();
     bidijkstra.preprocess();
     ch.preprocess();
 
     // threads=1, threads=2, and threads=16 (more threads than work blocks on small graphs).
     transport::ArcFlagsAlgorithm af1(graph, transport::PhastAlgorithm(ch.get_ch()), 4, transport::PartitionMethod::Grid,
-                                     1);
+                                     1, coords);
     transport::ArcFlagsAlgorithm af2(graph, transport::PhastAlgorithm(ch.get_ch()), 4, transport::PartitionMethod::Grid,
-                                     2);
+                                     2, coords);
     transport::ArcFlagsAlgorithm af16(graph, transport::PhastAlgorithm(ch.get_ch()), 4,
-                                      transport::PartitionMethod::Grid, 16);
+                                      transport::PartitionMethod::Grid, 16, coords);
     af1.preprocess();
     af2.preprocess();
     af16.preprocess();
 
     // core_fraction=0.5 so even small graphs have a non-trivial core; Grid partition, 4 regions.
-    transport::ChaseAlgorithm chase(graph, 0.5, 4, transport::PartitionMethod::Grid);
+    transport::ChaseAlgorithm chase(graph, 0.5, 4, transport::PartitionMethod::Grid, coords);
     chase.preprocess();
 
     // full labels (label_fraction=1.0) and tiered labels (label_fraction=0.5).
@@ -117,7 +128,10 @@ int main() {
     ok &= check_all_algorithms(transport::test::make_witness_graph());
     ok &= check_all_algorithms(transport::test::make_asymmetric_graph());
     ok &= check_all_algorithms(transport::test::make_disconnected_graph());
-    ok &= check_all_algorithms(transport::test::make_grid_graph(4, 4));
+    {
+        const transport::test::GraphWithCoords grid = transport::test::make_grid_graph(4, 4);
+        ok &= check_all_algorithms(grid.graph, grid.coords);
+    }
     ok &= check_malformed_graph_files_fail_fast();
     if (!ok) {
         std::cerr << "routing algorithm tests FAILED\n";

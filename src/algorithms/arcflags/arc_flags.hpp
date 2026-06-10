@@ -4,11 +4,13 @@
 #include "algorithms/phast.hpp"
 #include "algorithms/routing_algorithm.hpp"
 #include "algorithms/stamped_vector.hpp"
+#include "graph/geometry.hpp"
 #include "graph/graph.hpp"
 #include "graph/types.hpp"
 
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <vector>
 
 namespace transport {
@@ -28,9 +30,11 @@ namespace transport {
 class ArcFlagsAlgorithm final : public RoutingAlgorithm {
 public:
     explicit ArcFlagsAlgorithm(const Graph &graph, const PhastAlgorithm &phast, uint16_t regions = 32,
-                               PartitionMethod partition_method = PartitionMethod::Inertial, uint32_t threads = 1);
+                               PartitionMethod partition_method = PartitionMethod::Inertial, uint32_t threads = 1,
+                               std::span<const NodeCoord> coords = {});
     explicit ArcFlagsAlgorithm(const Graph &graph, uint16_t regions = 32,
-                               PartitionMethod partition_method = PartitionMethod::Inertial, uint32_t threads = 1);
+                               PartitionMethod partition_method = PartitionMethod::Inertial, uint32_t threads = 1,
+                               std::span<const NodeCoord> coords = {});
 
     std::string_view name() const override;
     void preprocess() override;
@@ -42,6 +46,7 @@ private:
     uint16_t regions_;
     PartitionMethod partition_method_;
     uint32_t threads_;
+    std::span<const NodeCoord> coords_;
     bool preprocessed_ = false;
 
     std::vector<uint16_t> region_of_;
