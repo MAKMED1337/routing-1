@@ -268,7 +268,7 @@ PathResult HubLabelsAlgorithm::query(VertexId source, VertexId target) const {
     const bool s_lab = is_labeled(source);
     const bool t_lab = is_labeled(target);
     const bool both_unlabeled = !s_lab && !t_lab;
-    uint32_t settled = 0;
+    QueryStats stats;
 
     // Forward side: source's stored hub label, or an upward search from source.
     // fwd_unlabeled is recorded only when the mu_low fallback below needs it.
@@ -279,7 +279,9 @@ PathResult HubLabelsAlgorithm::query(VertexId source, VertexId target) const {
         fwd_side = fwd_label(source);
     } else {
         fwd_scratch_.reset();
-        settled += collect(source, /*forward=*/true, fwd_buf, both_unlabeled ? &fwd_unlabeled : nullptr);
+        const uint32_t s = collect(source, /*forward=*/true, fwd_buf, both_unlabeled ? &fwd_unlabeled : nullptr);
+        stats.settled += s;
+        stats.settled_forward += s;
         fwd_side = fwd_buf;
     }
 
@@ -290,7 +292,9 @@ PathResult HubLabelsAlgorithm::query(VertexId source, VertexId target) const {
         bwd_side = bwd_label(target);
     } else {
         bwd_scratch_.reset();
-        settled += collect(target, /*forward=*/false, bwd_buf, nullptr);
+        const uint32_t s = collect(target, /*forward=*/false, bwd_buf, nullptr);
+        stats.settled += s;
+        stats.settled_backward += s;
         bwd_side = bwd_buf;
     }
 
@@ -314,7 +318,7 @@ PathResult HubLabelsAlgorithm::query(VertexId source, VertexId target) const {
         bwd_scratch_.reset();
     }
 
-    return {dist, settled};
+    return PathResult{dist, stats};
 }
 
 } // namespace transport

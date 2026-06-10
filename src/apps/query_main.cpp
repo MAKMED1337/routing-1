@@ -55,6 +55,14 @@ int main(int argc, char **argv) {
     std::cout << "distance_scale=" << transport::kDistanceScale << "\n";
     std::cout << "distance_m="
               << static_cast<double>(result.distance_units) / static_cast<double>(transport::kDistanceScale) << "\n";
-    std::cout << "settled=" << result.settled << "\n";
+    std::cout << "settled=" << result.stats.settled << "\n";
+    std::cout << "relaxed_arcs=" << result.stats.relaxed_arcs << "\n";
+    std::cout << "heap_pushes=" << result.stats.heap_pushes << "\n";
+    std::cout << "heuristic_evals=" << result.stats.heuristic_evals << "\n";
+    std::cout << "settled_forward=" << result.stats.settled_forward << "\n";
+    std::cout << "settled_backward=" << result.stats.settled_backward << "\n";
+    std::cout << "pruned_by_flag=" << result.stats.pruned_by_flag << "\n";
+    std::cout << "table_lookups=" << result.stats.table_lookups << "\n";
+    std::cout << "used_fallback=" << static_cast<int>(result.stats.used_fallback) << "\n";
     return 0;
 }

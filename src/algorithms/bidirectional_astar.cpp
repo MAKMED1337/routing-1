@@ -22,7 +22,7 @@ PathResult BidirectionalAStarAlgorithm::query(VertexId source, VertexId target) 
     }
 
     if (source == target) {
-        return PathResult{0, 0};
+        return PathResult{0, QueryStats{}};
     }
 
     forward_dist_.reset();
@@ -44,7 +44,7 @@ PathResult BidirectionalAStarAlgorithm::query(VertexId source, VertexId target) 
     backward_pq.push({backward_key(target, 0), target});
 
     Distance best = kUnreachable;
-    uint32_t settled = 0;
+    QueryStats stats;
 
     auto update_best = [&best](Distance candidate, Distance opposite) {
         if (opposite < kUnreachable) {
@@ -52,24 +52,34 @@ PathResult BidirectionalAStarAlgorithm::query(VertexId source, VertexId target) 
         }
     };
 
-    auto settle_next = [&settled, &update_best](HeapQueue &pq, const Graph &search_graph, StampedVector<Distance> &dist,
-                                                const StampedVector<Distance> &opposite_dist, const auto &key_for) {
+    auto settle_next = [&stats, &update_best](HeapQueue &pq, const Graph &search_graph, StampedVector<Distance> &dist,
+                                              const StampedVector<Distance> &opposite_dist, const auto &key_for,
+                                              bool is_forward) {
         const HeapNode top = pq.top();
         pq.pop();
 
         const Distance current = dist.get(top.v);
+        ++stats.heuristic_evals;
         if (top.key != key_for(top.v, current)) {
             return;
         }
 
-        ++settled;
+        ++stats.settled;
+        if (is_forward) {
+            ++stats.settled_forward;
+        } else {
+            ++stats.settled_backward;
+        }
         update_best(current, opposite_dist.get(top.v));
 
         for (const Edge &edge : search_graph.adjacent_edges(top.v)) {
+            ++stats.relaxed_arcs;
             const Distance next = current + edge.weight;
             if (next < dist.get(edge.to)) {
                 dist.set(edge.to, next);
+                ++stats.heuristic_evals;
                 pq.push({key_for(edge.to, next), edge.to});
+                ++stats.heap_pushes;
                 update_best(next, opposite_dist.get(edge.to));
             }
         }
@@ -83,13 +93,13 @@ PathResult BidirectionalAStarAlgorithm::query(VertexId source, VertexId target) 
         }
 
         if (forward_min <= backward_min) {
-            settle_next(forward_pq, graph_, forward_dist_, backward_dist_, forward_key);
+            settle_next(forward_pq, graph_, forward_dist_, backward_dist_, forward_key, true);
         } else {
-            settle_next(backward_pq, reverse_, backward_dist_, forward_dist_, backward_key);
+            settle_next(backward_pq, reverse_, backward_dist_, forward_dist_, backward_key, false);
         }
     }
 
-    return PathResult{best, settled};
+    return PathResult{best, stats};
 }
 
 } // namespace transport

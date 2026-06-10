@@ -89,7 +89,7 @@ add_executable(transport_query src/apps/query_main.cpp)
 target_link_libraries(transport_query PRIVATE transport_core CLI11::CLI11 project_warnings)
 
 add_executable(transport_benchmark src/apps/benchmark_main.cpp)
-target_link_libraries(transport_benchmark PRIVATE transport_core CLI11::CLI11 project_warnings)
+target_link_libraries(transport_benchmark PRIVATE bench_harness CLI11::CLI11)
 
 if(BUILD_TESTING)
   add_executable(graph_io_tests tests/graph_io_test.cpp)

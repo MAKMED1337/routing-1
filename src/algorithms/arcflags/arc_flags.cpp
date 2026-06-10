@@ -171,19 +171,21 @@ PathResult ArcFlagsAlgorithm::query(VertexId source, VertexId target) const {
     HeapQueue pq;
     pq.push({0, source});
 
-    uint32_t settled = 0;
+    QueryStats stats;
     while (!pq.empty()) {
         const HeapNode top = pq.top();
         pq.pop();
         if (top.key != dist_.get(top.v)) {
             continue;
         }
-        ++settled;
+        ++stats.settled;
         if (top.v == target) {
             break;
         }
         for (size_t k = graph_.offsets[top.v], end = graph_.offsets[top.v + 1]; k < end; ++k) {
+            ++stats.relaxed_arcs;
             if (!(forward_flags_[k] & target_bit)) {
+                ++stats.pruned_by_flag;
                 continue;
             }
             const Edge &e = graph_.edges[k];
@@ -191,11 +193,12 @@ PathResult ArcFlagsAlgorithm::query(VertexId source, VertexId target) const {
             if (nd < dist_.get(e.to)) {
                 dist_.set(e.to, nd);
                 pq.push({nd, e.to});
+                ++stats.heap_pushes;
             }
         }
     }
 
-    return PathResult{dist_.get(target), settled};
+    return PathResult{dist_.get(target), stats};
 }
 
 } // namespace transport

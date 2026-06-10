@@ -3,8 +3,6 @@
 #include "algorithms/heap_node.hpp"
 
 #include <algorithm>
-#include <cstddef>
-#include <cstdint>
 #include <stdexcept>
 #include <string_view>
 
@@ -35,7 +33,7 @@ PathResult BidirectionalDijkstraAlgorithm::query(VertexId source, VertexId targe
     backward_pq.push({0, target});
 
     Distance best = source == target ? 0 : kUnreachable;
-    uint32_t settled = 0;
+    QueryStats stats;
 
     auto update_best = [&best](Distance candidate, Distance opposite) {
         if (opposite < kUnreachable) {
@@ -43,22 +41,29 @@ PathResult BidirectionalDijkstraAlgorithm::query(VertexId source, VertexId targe
         }
     };
 
-    auto settle_next = [&settled, &update_best](HeapQueue &pq, const Graph &search_graph, StampedVector<Distance> &dist,
-                                                const StampedVector<Distance> &opposite_dist) {
+    auto settle_next = [&stats, &update_best](HeapQueue &pq, const Graph &search_graph, StampedVector<Distance> &dist,
+                                              const StampedVector<Distance> &opposite_dist, bool is_forward) {
         const HeapNode top = pq.top();
         pq.pop();
         if (top.key != dist.get(top.v)) {
             return;
         }
 
-        ++settled;
+        ++stats.settled;
+        if (is_forward) {
+            ++stats.settled_forward;
+        } else {
+            ++stats.settled_backward;
+        }
         update_best(top.key, opposite_dist.get(top.v));
 
         for (const Edge &edge : search_graph.adjacent_edges(top.v)) {
+            ++stats.relaxed_arcs;
             const Distance next = top.key + edge.weight;
             if (next < dist.get(edge.to)) {
                 dist.set(edge.to, next);
                 pq.push({next, edge.to});
+                ++stats.heap_pushes;
                 update_best(next, opposite_dist.get(edge.to));
             }
         }
@@ -72,13 +77,13 @@ PathResult BidirectionalDijkstraAlgorithm::query(VertexId source, VertexId targe
         }
 
         if (forward_min <= backward_min) {
-            settle_next(forward_pq, graph_, forward_dist_, backward_dist_);
+            settle_next(forward_pq, graph_, forward_dist_, backward_dist_, true);
         } else {
-            settle_next(backward_pq, reverse_, backward_dist_, forward_dist_);
+            settle_next(backward_pq, reverse_, backward_dist_, forward_dist_, false);
         }
     }
 
-    return PathResult{best, settled};
+    return PathResult{best, stats};
 }
 
 } // namespace transport

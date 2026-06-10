@@ -1,18 +1,19 @@
 #include "algorithms/ch/contraction_hierarchy.hpp"
 #include "algorithms/routing_algorithm.hpp"
 #include "algorithms/routing_instance.hpp"
-#include "algorithms/stopwatch.hpp"
+#include "apps/bench_utils.hpp"
 #include "graph/graph_io.hpp"
 #include "routing/routing.hpp"
 
 #include <CLI/CLI.hpp>
 
-#include <array>
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <numeric>
 #include <optional>
 #include <random>
 #include <string>
@@ -36,11 +37,6 @@ struct TimedResult {
     uint64_t query_us = 0;
 };
 
-struct TimedAlgorithmResult {
-    std::string_view name;
-    const TimedResult &timed;
-};
-
 TimedResult query_timed(const RoutingAlgorithm &algorithm, VertexId source, VertexId target) {
     const auto t0 = std::chrono::steady_clock::now();
     const PathResult result = algorithm.query(source, target);
@@ -49,16 +45,12 @@ TimedResult query_timed(const RoutingAlgorithm &algorithm, VertexId source, Vert
                        static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count())};
 }
 
-bool same_distance(uint64_t a, uint64_t b) { return a == b; }
-
 void print_preprocessing_metrics(std::string_view prefix, const RoutingInstance &instance) {
     const PreprocessReport &report = instance.stats;
     std::cout << prefix << "_dependency_preprocess_wall_s=" << report.dependency.wall_s << "\n";
     std::cout << prefix << "_dependency_preprocess_cpu_s=" << report.dependency.cpu_s << "\n";
     std::cout << prefix << "_algorithm_preprocess_wall_s=" << report.algorithm.wall_s << "\n";
     std::cout << prefix << "_algorithm_preprocess_cpu_s=" << report.algorithm.cpu_s << "\n";
-    // Process-wide high-water RSS, not memory owned by this algorithm alone: this prints A then
-    // B, so algorithm_b's values include algorithm_a's retained memory.
     std::cout << prefix << "_after_dependency_preprocess_process_peak_rss_mb=" << report.dependency.process_peak_rss_mb
               << "\n";
     std::cout << prefix << "_after_algorithm_preprocess_process_peak_rss_mb=" << report.algorithm.process_peak_rss_mb
@@ -73,23 +65,51 @@ void print_preprocessing_metrics(std::string_view prefix, const RoutingInstance 
     }
 }
 
-void write_benchmark_row(std::ofstream &out, uint32_t query, VertexId source, VertexId target,
-                         const std::array<TimedAlgorithmResult, 2> &results) {
-    out << query << "," << source << "," << target;
-    for (const TimedAlgorithmResult &result : results) {
-        out << "," << result.name;
+struct QueryAggregateInput {
+    std::vector<uint64_t> query_us;
+    std::vector<uint32_t> settled;
+    std::vector<uint64_t> relaxed_arcs;
+    std::vector<uint64_t> heap_pushes;
+    std::vector<uint64_t> heuristic_evals;
+    std::vector<uint64_t> pruned_by_flag;
+    std::vector<uint64_t> table_lookups;
+    uint64_t fallback_count = 0;
+};
+
+template <typename T> double mean_of(const std::vector<T> &v) {
+    if (v.empty()) {
+        return 0.0;
     }
-    out << "," << transport::kDistanceScale;
-    for (const TimedAlgorithmResult &result : results) {
-        out << "," << result.timed.path.distance_units;
+    return static_cast<double>(std::accumulate(v.begin(), v.end(), T{0})) / static_cast<double>(v.size());
+}
+
+template <typename T> double percentile_of(std::vector<T> v, double pct) {
+    if (v.empty()) {
+        return 0.0;
     }
-    for (const TimedAlgorithmResult &result : results) {
-        out << "," << result.timed.path.settled;
-    }
-    for (const TimedAlgorithmResult &result : results) {
-        out << "," << result.timed.query_us;
-    }
-    out << "\n";
+    std::sort(v.begin(), v.end());
+    const size_t idx = std::min(static_cast<size_t>(static_cast<double>(v.size()) * pct / 100.0), v.size() - 1);
+    return static_cast<double>(v[idx]);
+}
+
+bench::Json aggregate_to_json(QueryAggregateInput &agg) {
+    bench::Json j;
+    j["mean_us"] = mean_of(agg.query_us);
+    j["p50_us"] = percentile_of(agg.query_us, 50.0);
+    j["p95_us"] = percentile_of(agg.query_us, 95.0);
+    j["p99_us"] = percentile_of(agg.query_us, 99.0);
+    j["max_us"] =
+        agg.query_us.empty() ? 0.0 : static_cast<double>(*std::max_element(agg.query_us.begin(), agg.query_us.end()));
+    j["mean_settled"] = mean_of(agg.settled);
+    j["p50_settled"] = percentile_of(agg.settled, 50.0);
+    j["p95_settled"] = percentile_of(agg.settled, 95.0);
+    j["mean_relaxed_arcs"] = mean_of(agg.relaxed_arcs);
+    j["mean_heap_pushes"] = mean_of(agg.heap_pushes);
+    j["mean_heuristic_evals"] = mean_of(agg.heuristic_evals);
+    j["mean_pruned_by_flag"] = mean_of(agg.pruned_by_flag);
+    j["mean_table_lookups"] = mean_of(agg.table_lookups);
+    j["fallback_count"] = agg.fallback_count;
+    return j;
 }
 
 } // namespace
@@ -97,7 +117,7 @@ void write_benchmark_row(std::ofstream &out, uint32_t query, VertexId source, Ve
 int main(int argc, char **argv) {
     std::string graph_path;
     std::string coords_path;
-    std::string out_path = "reports/benchmarks/results.csv";
+    std::string out_path = "reports/benchmarks/results.json";
     std::string algorithm_a = "dijkstra";
     std::string algorithm_b = "ch";
     uint32_t queries = 10'000;
@@ -108,7 +128,7 @@ int main(int argc, char **argv) {
     CLI::App app{"Compare two routing algorithms on sampled graph queries"};
     app.add_option("--graph", graph_path, "Path to graph binary")->required()->check(CLI::ExistingFile);
     app.add_option("--coords", coords_path, "Path to coordinates binary")->check(CLI::ExistingFile);
-    app.add_option("--out", out_path, "Output CSV path")->default_val("reports/benchmarks/results.csv");
+    app.add_option("--out", out_path, "Output JSON path")->default_val("reports/benchmarks/results.json");
     app.add_option("--queries", queries, "Accepted query count")->default_val(10'000)->check(CLI::PositiveNumber);
     app.add_option("--min-settled", min_settled, "Minimum settled vertices for accepted baseline queries")
         ->default_val(100'000);
@@ -168,15 +188,9 @@ int main(int argc, char **argv) {
     if (output_path.has_parent_path()) {
         fs::create_directories(output_path.parent_path());
     }
-    std::ofstream out(out_path);
-    if (!out) {
-        std::cerr << "failed to open output file\n";
-        return 1;
-    }
-    out << "query,source,target,algorithm_a,algorithm_b,distance_scale,"
-        << "algorithm_a_units,algorithm_b_units,algorithm_a_settled,algorithm_b_settled,algorithm_a_us,algorithm_b_"
-           "us\n";
 
+    QueryAggregateInput agg_a;
+    QueryAggregateInput agg_b;
     uint32_t accepted = 0;
     uint64_t attempts = 0;
     const uint64_t max_attempts = static_cast<uint64_t>(queries) * 100;
@@ -191,27 +205,74 @@ int main(int argc, char **argv) {
         const TimedResult a = query_timed(runner_a_algo, source, target);
         const TimedResult b = query_timed(runner_b_algo, source, target);
 
-        if (a.path.distance_units == transport::kUnreachable || a.path.settled < min_settled ||
-            a.path.settled > max_settled) {
+        if (a.path.distance_units == transport::kUnreachable || a.path.stats.settled < min_settled ||
+            a.path.stats.settled > max_settled) {
             continue;
         }
-        if (!same_distance(a.path.distance_units, b.path.distance_units)) {
+        if (a.path.distance_units != b.path.distance_units) {
             std::cerr << "distance mismatch for query source=" << source << " target=" << target
                       << " algorithm_a=" << runner_a_algo.name() << " distance=" << a.path.distance_units
                       << " algorithm_b=" << runner_b_algo.name() << " distance=" << b.path.distance_units << "\n";
             return 2;
         }
 
-        write_benchmark_row(
-            out, accepted, source, target,
-            {TimedAlgorithmResult{runner_a_algo.name(), a}, TimedAlgorithmResult{runner_b_algo.name(), b}});
+        agg_a.query_us.push_back(a.query_us);
+        agg_a.settled.push_back(a.path.stats.settled);
+        agg_a.relaxed_arcs.push_back(a.path.stats.relaxed_arcs);
+        agg_a.heap_pushes.push_back(a.path.stats.heap_pushes);
+        agg_a.heuristic_evals.push_back(a.path.stats.heuristic_evals);
+        agg_a.pruned_by_flag.push_back(a.path.stats.pruned_by_flag);
+        agg_a.table_lookups.push_back(a.path.stats.table_lookups);
+        if (a.path.stats.used_fallback) {
+            ++agg_a.fallback_count;
+        }
+
+        agg_b.query_us.push_back(b.query_us);
+        agg_b.settled.push_back(b.path.stats.settled);
+        agg_b.relaxed_arcs.push_back(b.path.stats.relaxed_arcs);
+        agg_b.heap_pushes.push_back(b.path.stats.heap_pushes);
+        agg_b.heuristic_evals.push_back(b.path.stats.heuristic_evals);
+        agg_b.pruned_by_flag.push_back(b.path.stats.pruned_by_flag);
+        agg_b.table_lookups.push_back(b.path.stats.table_lookups);
+        if (b.path.stats.used_fallback) {
+            ++agg_b.fallback_count;
+        }
+
         ++accepted;
     }
+
+    bench::Json j;
+    j["algorithm_a"] = runner_a_algo.name();
+    j["algorithm_b"] = runner_b_algo.name();
+    j["date"] = bench::current_datetime_iso();
+    j["graph"] =
+        bench::Json{{"path", graph_path}, {"vertices", graph.vertex_count()}, {"directed_edges", graph.edge_count()}};
+    j["distance_scale"] = transport::kDistanceScale;
+    j["filters"] = bench::Json{{"min_settled", min_settled}, {"max_settled", max_settled}};
+    j["preprocessing"] = bench::Json{
+        {"algorithm_a_wall_s", instance_a->stats.dependency.wall_s + instance_a->stats.algorithm.wall_s},
+        {"algorithm_b_wall_s", instance_b->stats.dependency.wall_s + instance_b->stats.algorithm.wall_s},
+    };
+    j["queries"] = bench::Json{
+        {"requested", queries},
+        {"accepted", accepted},
+        {"attempted", attempts},
+        {"seed", seed},
+        {"algorithm_a", aggregate_to_json(agg_a)},
+        {"algorithm_b", aggregate_to_json(agg_b)},
+    };
+
+    std::ofstream out(out_path);
+    if (!out) {
+        std::cerr << "failed to open output file\n";
+        return 1;
+    }
+    out << j.dump(2) << "\n";
 
     std::cout << "algorithm_a=" << runner_a_algo.name() << "\n";
     std::cout << "algorithm_b=" << runner_b_algo.name() << "\n";
     std::cout << "accepted_queries=" << accepted << "\n";
     std::cout << "attempted_queries=" << attempts << "\n";
-    std::cout << "output_csv=" << out_path << "\n";
+    std::cout << "output_json=" << out_path << "\n";
     return accepted == queries ? 0 : 3;
 }
