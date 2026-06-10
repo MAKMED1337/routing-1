@@ -5,43 +5,79 @@
 
 #include <cstdint>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
+
+namespace {
+
+void print_usage() {
+    std::cout << "usage: transport_query --graph <graph.bin> --source <id> --target <id> --algorithm "
+                 "dijkstra|astar|alt|bidijkstra|bidi_astar|ch|arcflags|chase|hl [--coords <coords.bin>]\n";
+}
+
+std::string require_value(int argc, char **argv, int &i, std::string_view key) {
+    if (i + 1 >= argc) {
+        throw std::invalid_argument("missing value for " + std::string(key));
+    }
+    ++i;
+    return argv[i];
+}
+
+transport::VertexId parse_vertex_id(std::string_view text, std::string_view key) {
+    size_t consumed = 0;
+    const std::string value(text);
+    if (value.empty() || value.front() == '-') {
+        throw std::invalid_argument("invalid integer for " + std::string(key) + ": " + value);
+    }
+    const unsigned long long parsed = std::stoull(value, &consumed);
+    if (consumed != value.size()) {
+        throw std::invalid_argument("invalid integer for " + std::string(key) + ": " + value);
+    }
+    if (parsed > std::numeric_limits<transport::VertexId>::max()) {
+        throw std::invalid_argument("value too large for " + std::string(key) + ": " + value);
+    }
+    return static_cast<transport::VertexId>(parsed);
+}
+
+} // namespace
 
 int main(int argc, char **argv) {
     if (argc == 2 && std::string(argv[1]) == "--help") {
-        std::cout << "usage: transport_query --graph <graph.bin> --source <id> --target <id> --algorithm "
-                     "dijkstra|astar|alt|bidijkstra|bidi_astar|ch|arcflags|chase|hl [--coords <coords.bin>]\n";
+        print_usage();
         return 0;
     }
 
     std::string graph_path;
     std::string coords_path;
-    uint32_t source = 0;
-    uint32_t target = 0;
+    transport::VertexId source = 0;
+    transport::VertexId target = 0;
     std::string algo = "dijkstra";
 
-    for (int i = 1; i + 1 < argc; ++i) {
-        const std::string key = argv[i];
-        const std::string value = argv[i + 1];
-        if (key == "--graph") {
-            graph_path = value;
-            ++i;
-        } else if (key == "--coords") {
-            coords_path = value;
-            ++i;
-        } else if (key == "--source") {
-            source = static_cast<uint32_t>(std::stoul(value));
-            ++i;
-        } else if (key == "--target") {
-            target = static_cast<uint32_t>(std::stoul(value));
-            ++i;
-        } else if (key == "--algorithm") {
-            algo = value;
-            ++i;
+    try {
+        for (int i = 1; i < argc; ++i) {
+            const std::string key = argv[i];
+            if (key == "--graph") {
+                graph_path = require_value(argc, argv, i, key);
+            } else if (key == "--coords") {
+                coords_path = require_value(argc, argv, i, key);
+            } else if (key == "--source") {
+                source = parse_vertex_id(require_value(argc, argv, i, key), key);
+            } else if (key == "--target") {
+                target = parse_vertex_id(require_value(argc, argv, i, key), key);
+            } else if (key == "--algorithm") {
+                algo = require_value(argc, argv, i, key);
+            } else {
+                throw std::invalid_argument("unknown argument: " + key);
+            }
         }
+    } catch (const std::exception &err) {
+        std::cerr << err.what() << "\n";
+        print_usage();
+        return 1;
     }
 
     if (graph_path.empty()) {
@@ -64,7 +100,7 @@ int main(int argc, char **argv) {
     try {
         algorithm = transport::make_routing_algorithm(algo, graph, coords);
         algorithm->preprocess();
-    } catch (const std::invalid_argument &err) {
+    } catch (const std::exception &err) {
         std::cerr << err.what() << "\n";
         return 1;
     }

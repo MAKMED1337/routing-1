@@ -14,6 +14,7 @@
 
 #include <filesystem>
 #include <iostream>
+#include <limits>
 #include <random>
 #include <span>
 #include <stdexcept>
@@ -69,6 +70,21 @@ bool check_malformed_graph_files_fail_fast() {
     const bool ok = expect_load_failure(invalid_offsets) && expect_load_failure(invalid_edge);
     std::filesystem::remove(invalid_offsets);
     std::filesystem::remove(invalid_edge);
+    return ok;
+}
+
+bool check_chase_validation() {
+    const transport::Graph graph = transport::test::make_line_graph();
+    bool ok = true;
+    for (const double core_fraction : {0.0, -0.1, 1.1, std::numeric_limits<double>::quiet_NaN()}) {
+        try {
+            transport::ChaseAlgorithm chase(graph, core_fraction, 4, transport::PartitionMethod::Grid, {});
+            chase.preprocess();
+            std::cerr << "chase: expected std::invalid_argument for core_fraction=" << core_fraction << "\n";
+            ok = false;
+        } catch (const std::invalid_argument &) {
+        }
+    }
     return ok;
 }
 
@@ -133,6 +149,7 @@ int main() {
         ok &= check_all_algorithms(grid.graph, grid.coords);
     }
     ok &= check_malformed_graph_files_fail_fast();
+    ok &= check_chase_validation();
     if (!ok) {
         std::cerr << "routing algorithm tests FAILED\n";
         return 1;

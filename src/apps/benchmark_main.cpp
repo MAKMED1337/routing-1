@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <random>
 #include <stdexcept>
@@ -35,6 +36,39 @@ struct TimedAlgorithmResult {
     std::string_view name;
     const TimedResult &timed;
 };
+
+void print_usage() {
+    std::cerr << "usage: transport_benchmark --graph <graph.bin> "
+                 "[--algorithm-a dijkstra|astar|alt|bidijkstra|bidi_astar|ch|arcflags|chase|hl] "
+                 "[--algorithm-b dijkstra|astar|alt|bidijkstra|bidi_astar|ch|arcflags|chase|hl] [--queries N] "
+                 "[--min-settled A] "
+                 "[--max-settled B] "
+                 "[--seed S] [--out file] [--coords <coords.bin>]\n";
+}
+
+std::string require_value(int argc, char **argv, int &i, std::string_view key) {
+    if (i + 1 >= argc) {
+        throw std::invalid_argument("missing value for " + std::string(key));
+    }
+    ++i;
+    return argv[i];
+}
+
+uint32_t parse_u32(std::string_view text, std::string_view key) {
+    size_t consumed = 0;
+    const std::string value(text);
+    if (value.empty() || value.front() == '-') {
+        throw std::invalid_argument("invalid integer for " + std::string(key) + ": " + value);
+    }
+    const unsigned long long parsed = std::stoull(value, &consumed);
+    if (consumed != value.size()) {
+        throw std::invalid_argument("invalid integer for " + std::string(key) + ": " + value);
+    }
+    if (parsed > std::numeric_limits<uint32_t>::max()) {
+        throw std::invalid_argument("value too large for " + std::string(key) + ": " + value);
+    }
+    return static_cast<uint32_t>(parsed);
+}
 
 uint64_t preprocess_timed(RoutingAlgorithm &algorithm) {
     const auto t0 = std::chrono::steady_clock::now();
@@ -82,6 +116,11 @@ void write_benchmark_row(std::ofstream &out, uint32_t query, VertexId source, Ve
 } // namespace
 
 int main(int argc, char **argv) {
+    if (argc == 2 && std::string(argv[1]) == "--help") {
+        print_usage();
+        return 0;
+    }
+
     std::string graph_path;
     std::string coords_path;
     std::string out_path = "reports/benchmarks/results.csv";
@@ -92,50 +131,55 @@ int main(int argc, char **argv) {
     uint32_t max_settled = 1'000'000;
     uint32_t seed = 1;
 
-    for (int i = 1; i + 1 < argc; ++i) {
-        const std::string key = argv[i];
-        const std::string value = argv[i + 1];
-        if (key == "--graph") {
-            graph_path = value;
-            ++i;
-        } else if (key == "--coords") {
-            coords_path = value;
-            ++i;
-        } else if (key == "--out") {
-            out_path = value;
-            ++i;
-        } else if (key == "--queries") {
-            queries = static_cast<uint32_t>(std::stoul(value));
-            ++i;
-        } else if (key == "--min-settled") {
-            min_settled = static_cast<uint32_t>(std::stoul(value));
-            ++i;
-        } else if (key == "--max-settled") {
-            max_settled = static_cast<uint32_t>(std::stoul(value));
-            ++i;
-        } else if (key == "--seed") {
-            seed = static_cast<uint32_t>(std::stoul(value));
-            ++i;
-        } else if (key == "--algorithm-a") {
-            algorithm_a = value;
-            ++i;
-        } else if (key == "--algorithm-b") {
-            algorithm_b = value;
-            ++i;
+    try {
+        for (int i = 1; i < argc; ++i) {
+            const std::string key = argv[i];
+            if (key == "--graph") {
+                graph_path = require_value(argc, argv, i, key);
+            } else if (key == "--coords") {
+                coords_path = require_value(argc, argv, i, key);
+            } else if (key == "--out") {
+                out_path = require_value(argc, argv, i, key);
+            } else if (key == "--queries") {
+                queries = parse_u32(require_value(argc, argv, i, key), key);
+            } else if (key == "--min-settled") {
+                min_settled = parse_u32(require_value(argc, argv, i, key), key);
+            } else if (key == "--max-settled") {
+                max_settled = parse_u32(require_value(argc, argv, i, key), key);
+            } else if (key == "--seed") {
+                seed = parse_u32(require_value(argc, argv, i, key), key);
+            } else if (key == "--algorithm-a") {
+                algorithm_a = require_value(argc, argv, i, key);
+            } else if (key == "--algorithm-b") {
+                algorithm_b = require_value(argc, argv, i, key);
+            } else {
+                throw std::invalid_argument("unknown argument: " + key);
+            }
         }
+    } catch (const std::exception &err) {
+        std::cerr << err.what() << "\n";
+        print_usage();
+        return 1;
     }
 
     if (graph_path.empty()) {
-        std::cerr << "usage: transport_benchmark --graph <graph.bin> "
-                     "[--algorithm-a dijkstra|astar|alt|bidijkstra|bidi_astar|ch|arcflags|chase|hl] "
-                     "[--algorithm-b dijkstra|astar|alt|bidijkstra|bidi_astar|ch|arcflags|chase|hl] [--queries N] "
-                     "[--min-settled A] "
-                     "[--max-settled B] "
-                     "[--seed S] [--out file] [--coords <coords.bin>]\n";
+        print_usage();
+        return 1;
+    }
+    if (queries == 0) {
+        std::cerr << "--queries must be > 0\n";
+        return 1;
+    }
+    if (min_settled > max_settled) {
+        std::cerr << "--min-settled must be <= --max-settled\n";
         return 1;
     }
 
     const Graph graph = transport::load_graph_binary(graph_path);
+    if (graph.vertex_count() == 0) {
+        std::cerr << "graph must contain at least one vertex\n";
+        return 1;
+    }
     std::vector<transport::NodeCoord> coords;
     if (!coords_path.empty()) {
         coords = transport::load_coords_binary(coords_path);
@@ -150,7 +194,7 @@ int main(int argc, char **argv) {
         runner_b = transport::make_routing_algorithm(algorithm_b, graph, coords);
         algorithm_a_preprocess_us = preprocess_timed(*runner_a);
         algorithm_b_preprocess_us = preprocess_timed(*runner_b);
-    } catch (const std::invalid_argument &err) {
+    } catch (const std::exception &err) {
         std::cerr << err.what() << "\n";
         return 1;
     }
@@ -160,7 +204,14 @@ int main(int argc, char **argv) {
     std::mt19937 rng(seed);
     std::uniform_int_distribution<VertexId> pick(0, graph.vertex_count() - 1);
 
-    fs::create_directories(fs::path(out_path).parent_path());
+    const fs::path output_path(out_path);
+    if (fs::exists(output_path)) {
+        std::cerr << "output file already exists: " << out_path << "\n";
+        return 1;
+    }
+    if (output_path.has_parent_path()) {
+        fs::create_directories(output_path.parent_path());
+    }
     std::ofstream out(out_path);
     if (!out) {
         std::cerr << "failed to open output file\n";
@@ -171,8 +222,9 @@ int main(int argc, char **argv) {
            "us\n";
 
     uint32_t accepted = 0;
-    uint32_t attempts = 0;
-    while (accepted < queries && attempts < queries * 100) {
+    uint64_t attempts = 0;
+    const uint64_t max_attempts = static_cast<uint64_t>(queries) * 100;
+    while (accepted < queries && attempts < max_attempts) {
         ++attempts;
         const VertexId source = pick(rng);
         const VertexId target = pick(rng);

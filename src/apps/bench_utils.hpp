@@ -88,6 +88,13 @@ inline LoadedGraph load_graph(const BenchmarkArgs &args) {
 // available post-preprocess. Pass {} to omit algorithm-specific fields.
 inline void run_benchmark(const BenchmarkArgs &args, const LoadedGraph &loaded, std::string_view variant, RoutingAlgorithm &algo, std::function<Json()> extra_fields = {},
                           std::ostream &out = std::cout) {
+    if (args.query_count == 0) {
+        throw std::invalid_argument("benchmark query count must be > 0");
+    }
+    if (loaded.graph.vertex_count() == 0) {
+        throw std::invalid_argument("benchmark graph must contain at least one vertex");
+    }
+
     const Stopwatch pp_sw;
     algo.preprocess();
     const std::chrono::nanoseconds pp_wall_ns = pp_sw.wall_elapsed();

@@ -28,6 +28,19 @@ using transport::NodeCoord;
 
 namespace {
 
+void print_usage() {
+    std::cerr << "usage: transport_import_osm --input <europe.osm.pbf> --output <graph.bin> --stats "
+                 "<stats.json> [--coords-output <coords.bin>]\n";
+}
+
+std::string require_value(int argc, char **argv, int &i, std::string_view key) {
+    if (i + 1 >= argc) {
+        throw std::invalid_argument("missing value for " + std::string(key));
+    }
+    ++i;
+    return argv[i];
+}
+
 struct RawSegment {
     uint64_t from_osm_id = 0;
     uint64_t to_osm_id = 0;
@@ -215,6 +228,9 @@ std::vector<fs::path> sort_node_chunks(const fs::path &raw_nodes_path, const fs:
         }
         out.write(reinterpret_cast<const char *>(node_ids.data()),
                   static_cast<std::streamsize>(node_ids.size() * sizeof(uint64_t)));
+        if (!out) {
+            throw std::runtime_error("failed to write sorted node chunk");
+        }
         chunks.push_back(chunk_path);
     }
     return chunks;
@@ -401,6 +417,9 @@ void write_stats_json(const std::string &path, const std::string &input_file, ui
     out << "  \"directed_edges\": " << graph.edge_count() << ",\n";
     out << "  \"import_seconds\": " << import_seconds << "\n";
     out << "}\n";
+    if (!out) {
+        throw std::runtime_error("failed to write stats file");
+    }
 }
 
 } // namespace
@@ -410,37 +429,41 @@ int main(int argc, char **argv) {
     std::string output;
     std::string stats;
     std::string coords_output;
-    for (int i = 1; i + 1 < argc; ++i) {
-        const std::string key = argv[i];
-        const std::string value = argv[i + 1];
-        if (key == "--input") {
-            input = value;
-            ++i;
-        } else if (key == "--output") {
-            output = value;
-            ++i;
-        } else if (key == "--stats") {
-            stats = value;
-            ++i;
-        } else if (key == "--coords-output") {
-            coords_output = value;
-            ++i;
+    try {
+        for (int i = 1; i < argc; ++i) {
+            const std::string key = argv[i];
+            if (key == "--input") {
+                input = require_value(argc, argv, i, key);
+            } else if (key == "--output") {
+                output = require_value(argc, argv, i, key);
+            } else if (key == "--stats") {
+                stats = require_value(argc, argv, i, key);
+            } else if (key == "--coords-output") {
+                coords_output = require_value(argc, argv, i, key);
+            } else {
+                throw std::invalid_argument("unknown argument: " + key);
+            }
         }
+    } catch (const std::exception &err) {
+        std::cerr << err.what() << "\n";
+        print_usage();
+        return 1;
     }
 
     if (input.empty() || output.empty() || stats.empty()) {
-        std::cerr << "usage: transport_import_osm --input <europe.osm.pbf> --output <graph.bin> --stats "
-                     "<stats.json> [--coords-output <coords.bin>]\n";
+        print_usage();
         return 1;
     }
 
     const auto t0 = std::chrono::steady_clock::now();
     const fs::path output_path(output);
-    fs::create_directories(output_path.parent_path());
+    if (output_path.has_parent_path()) {
+        fs::create_directories(output_path.parent_path());
+    }
 
     const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
-    const fs::path temp_dir =
-        output_path.parent_path() / (output_path.filename().string() + ".tmp." + std::to_string(stamp));
+    const fs::path temp_root = output_path.has_parent_path() ? output_path.parent_path() : fs::current_path();
+    const fs::path temp_dir = temp_root / (output_path.filename().string() + ".tmp." + std::to_string(stamp));
     fs::create_directories(temp_dir);
     const fs::path raw_nodes_path = temp_dir / "nodes.raw.bin";
     const fs::path raw_segments_path = temp_dir / "segments.raw.bin";
