@@ -9,7 +9,7 @@ Graph build_reverse_graph(const Graph &graph) {
     const VertexId vertices = graph.vertex_count();
 
     Graph reverse;
-    reverse.coords = graph.coords;
+    reverse.vertex_count_ = vertices;
     reverse.offsets.assign(static_cast<size_t>(vertices) + 1, 0);
     reverse.edges.resize(graph.edges.size());
 

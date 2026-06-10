@@ -4,10 +4,12 @@
 #include "graph/graph.hpp"
 
 #include <memory>
+#include <span>
 #include <string>
 
 namespace transport {
 
-std::unique_ptr<RoutingAlgorithm> make_routing_algorithm(const std::string &name, const Graph &graph);
+std::unique_ptr<RoutingAlgorithm> make_routing_algorithm(const std::string &name, const Graph &graph,
+                                                         std::span<const NodeCoord> coords = {});
 
 } // namespace transport

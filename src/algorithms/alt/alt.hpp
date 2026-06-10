@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <random>
+#include <span>
 #include <string_view>
 #include <vector>
 
@@ -17,7 +18,7 @@ class AltAlgorithm final : public RoutingAlgorithm {
 public:
     explicit AltAlgorithm(const Graph &graph);
     AltAlgorithm(const Graph &graph, uint32_t landmark_count, alt::LandmarkStrategy strategy, uint32_t active_landmarks,
-                 std::mt19937 rng);
+                 std::mt19937 rng, std::span<const NodeCoord> coords = {});
 
     [[nodiscard]] std::string_view name() const override;
     void preprocess() override;
@@ -31,6 +32,7 @@ private:
     alt::LandmarkStrategy strategy_;
     uint32_t active_landmarks_;
     std::mt19937 rng_;
+    std::span<const NodeCoord> coords_;
     Graph reverse_;
     alt::LandmarkSet landmarks_;
     mutable std::vector<size_t> active_idx_;

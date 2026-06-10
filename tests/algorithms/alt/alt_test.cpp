@@ -35,15 +35,15 @@ bool check_alt_landmark_edges() {
         return false;
     }
 
-    transport::Graph geo_disconnected = disconnected;
-    geo_disconnected.coords = {
+    const transport::Graph &geo_disconnected = disconnected;
+    const std::vector<transport::NodeCoord> coords = {
         {50.0, 20.0},
         {50.1, 20.0},
         {51.0, 21.0},
         {51.1, 21.0},
     };
     transport::AltAlgorithm planar_alt(geo_disconnected, 10, transport::alt::LandmarkStrategy::Planar, 10,
-                                       std::mt19937{1});
+                                       std::mt19937{1}, coords);
     planar_alt.preprocess();
     return check_all_pairs(geo_disconnected, planar_alt, "alt planar oversized landmarks");
 }

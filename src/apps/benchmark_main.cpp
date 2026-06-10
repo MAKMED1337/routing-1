@@ -15,6 +15,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace fs = std::filesystem;
 using transport::ContractionHierarchyAlgorithm;
@@ -82,6 +83,7 @@ void write_benchmark_row(std::ofstream &out, uint32_t query, VertexId source, Ve
 
 int main(int argc, char **argv) {
     std::string graph_path;
+    std::string coords_path;
     std::string out_path = "reports/benchmarks/results.csv";
     std::string algorithm_a = "dijkstra";
     std::string algorithm_b = "ch";
@@ -95,6 +97,9 @@ int main(int argc, char **argv) {
         const std::string value = argv[i + 1];
         if (key == "--graph") {
             graph_path = value;
+            ++i;
+        } else if (key == "--coords") {
+            coords_path = value;
             ++i;
         } else if (key == "--out") {
             out_path = value;
@@ -126,23 +131,35 @@ int main(int argc, char **argv) {
                      "[--algorithm-b dijkstra|astar|alt|bidijkstra|bidi_astar|ch|arcflags|chase|hl] [--queries N] "
                      "[--min-settled A] "
                      "[--max-settled B] "
-                     "[--seed S] [--out file]\n";
+                     "[--seed S] [--out file] [--coords <coords.bin>]\n";
         return 1;
     }
 
     const Graph graph = transport::load_graph_binary(graph_path);
+    std::vector<transport::NodeCoord> coords;
+    if (!coords_path.empty()) {
+        coords = transport::load_coords_binary(coords_path);
+    }
+    for (const std::string &algo : {algorithm_a, algorithm_b}) {
+        if ((algo == "astar" || algo == "bidi_astar") && coords_path.empty()) {
+            std::cerr << "algorithm '" << algo << "' requires --coords <coords.bin>\n";
+            return 1;
+        }
+    }
+
     std::unique_ptr<RoutingAlgorithm> runner_a;
     std::unique_ptr<RoutingAlgorithm> runner_b;
+    uint64_t algorithm_a_preprocess_us = 0;
+    uint64_t algorithm_b_preprocess_us = 0;
     try {
-        runner_a = transport::make_routing_algorithm(algorithm_a, graph);
-        runner_b = transport::make_routing_algorithm(algorithm_b, graph);
+        runner_a = transport::make_routing_algorithm(algorithm_a, graph, coords);
+        runner_b = transport::make_routing_algorithm(algorithm_b, graph, coords);
+        algorithm_a_preprocess_us = preprocess_timed(*runner_a);
+        algorithm_b_preprocess_us = preprocess_timed(*runner_b);
     } catch (const std::invalid_argument &err) {
         std::cerr << err.what() << "\n";
         return 1;
     }
-
-    const uint64_t algorithm_a_preprocess_us = preprocess_timed(*runner_a);
-    const uint64_t algorithm_b_preprocess_us = preprocess_timed(*runner_b);
     print_preprocessing_metrics(runner_a->name(), *runner_a, algorithm_a_preprocess_us);
     print_preprocessing_metrics(runner_b->name(), *runner_b, algorithm_b_preprocess_us);
 

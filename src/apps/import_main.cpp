@@ -232,7 +232,7 @@ struct NodeHeapCompare {
 // K-way merges the sorted node-id chunks, assigning each distinct osm_id a graph_id (and an
 // empty coord slot to be filled in the second pass). Returns the osm_id -> graph_id mapping
 // sorted by osm_id, ready for binary search.
-std::vector<MappingRecord> build_node_mapping(const std::vector<fs::path> &chunks, Graph &graph) {
+std::vector<MappingRecord> build_node_mapping(const std::vector<fs::path> &chunks, std::vector<NodeCoord> &coords) {
     std::vector<std::ifstream> inputs;
     inputs.reserve(chunks.size());
     for (const fs::path &chunk : chunks) {
@@ -256,8 +256,8 @@ std::vector<MappingRecord> build_node_mapping(const std::vector<fs::path> &chunk
         heap.pop();
 
         if (mapping.empty() || mapping.back().osm_id != entry.osm_id) {
-            const auto graph_id = static_cast<uint32_t>(graph.coords.size());
-            graph.coords.push_back(NodeCoord{});
+            const auto graph_id = static_cast<uint32_t>(coords.size());
+            coords.push_back(NodeCoord{});
             mapping.push_back(MappingRecord{.osm_id = entry.osm_id, .graph_id = graph_id});
         }
 
@@ -280,8 +280,9 @@ uint32_t lookup_graph_id(const std::vector<MappingRecord> &mapping, uint64_t osm
 
 class CoordinateCollector : public osmium::handler::Handler {
 public:
-    CoordinateCollector(const std::vector<MappingRecord> &mapping, Graph &graph, std::vector<uint8_t> &has_coord)
-        : mapping_(mapping), graph_(graph), has_coord_(has_coord) {}
+    CoordinateCollector(const std::vector<MappingRecord> &mapping, std::vector<NodeCoord> &coords,
+                        std::vector<uint8_t> &has_coord)
+        : mapping_(mapping), coords_(coords), has_coord_(has_coord) {}
 
     void node(const osmium::Node &node) {
         const uint64_t osm_id = positive_osm_id(node.id());
@@ -290,7 +291,7 @@ public:
             return;
         }
 
-        graph_.coords[mapping->graph_id] =
+        coords_[mapping->graph_id] =
             NodeCoord{.lat = node.location().lat_without_check(), .lon = node.location().lon_without_check()};
         has_coord_[mapping->graph_id] = 1;
     }
@@ -309,7 +310,7 @@ private:
     }
 
     const std::vector<MappingRecord> &mapping_;
-    Graph &graph_;
+    std::vector<NodeCoord> &coords_;
     std::vector<uint8_t> &has_coord_;
     size_t next_index_ = 0;
 };
@@ -332,13 +333,14 @@ struct ResolvedEdge {
 // either endpoint lacks coordinates or the edge weight overflows. Both CSR passes go through
 // this so the counted and filled edges can never diverge.
 std::optional<ResolvedEdge> resolve_segment(const RawSegment &segment, const std::vector<MappingRecord> &mapping,
-                                            const std::vector<uint8_t> &has_coord, const Graph &graph) {
+                                            const std::vector<uint8_t> &has_coord,
+                                            const std::vector<NodeCoord> &coords) {
     const uint32_t from = lookup_graph_id(mapping, segment.from_osm_id);
     const uint32_t to = lookup_graph_id(mapping, segment.to_osm_id);
     if (has_coord[from] == 0 || has_coord[to] == 0) {
         return std::nullopt;
     }
-    const std::optional<Edge> edge = make_edge(to, graph.coords[from], graph.coords[to]);
+    const std::optional<Edge> edge = make_edge(to, coords[from], coords[to]);
     if (!edge.has_value()) {
         return std::nullopt;
     }
@@ -346,7 +348,7 @@ std::optional<ResolvedEdge> resolve_segment(const RawSegment &segment, const std
 }
 
 void build_csr_edges(const fs::path &raw_segments_path, const std::vector<MappingRecord> &mapping,
-                     const std::vector<uint8_t> &has_coord, Graph &graph) {
+                     const std::vector<uint8_t> &has_coord, const std::vector<NodeCoord> &coords, Graph &graph) {
     graph.offsets.assign(static_cast<size_t>(graph.vertex_count()) + 1, 0);
     uint64_t directed_edges = 0;
 
@@ -357,7 +359,7 @@ void build_csr_edges(const fs::path &raw_segments_path, const std::vector<Mappin
         }
         RawSegment segment;
         while (read_record(in, segment)) {
-            if (const std::optional<ResolvedEdge> resolved = resolve_segment(segment, mapping, has_coord, graph)) {
+            if (const std::optional<ResolvedEdge> resolved = resolve_segment(segment, mapping, has_coord, coords)) {
                 graph.offsets[static_cast<size_t>(resolved->from) + 1] += 1;
                 ++directed_edges;
             }
@@ -378,7 +380,7 @@ void build_csr_edges(const fs::path &raw_segments_path, const std::vector<Mappin
         }
         RawSegment segment;
         while (read_record(in, segment)) {
-            if (const std::optional<ResolvedEdge> resolved = resolve_segment(segment, mapping, has_coord, graph)) {
+            if (const std::optional<ResolvedEdge> resolved = resolve_segment(segment, mapping, has_coord, coords)) {
                 const size_t pos = cursor[resolved->from]++;
                 graph.edges[pos] = resolved->edge;
             }
@@ -407,6 +409,7 @@ int main(int argc, char **argv) {
     std::string input;
     std::string output;
     std::string stats;
+    std::string coords_output;
     for (int i = 1; i + 1 < argc; ++i) {
         const std::string key = argv[i];
         const std::string value = argv[i + 1];
@@ -419,11 +422,15 @@ int main(int argc, char **argv) {
         } else if (key == "--stats") {
             stats = value;
             ++i;
+        } else if (key == "--coords-output") {
+            coords_output = value;
+            ++i;
         }
     }
 
     if (input.empty() || output.empty() || stats.empty()) {
-        std::cerr << "usage: transport_import_osm --input <europe.osm.pbf> --output <graph.bin> --stats <stats.json>\n";
+        std::cerr << "usage: transport_import_osm --input <europe.osm.pbf> --output <graph.bin> --stats "
+                     "<stats.json> [--coords-output <coords.bin>]\n";
         return 1;
     }
 
@@ -448,20 +455,26 @@ int main(int argc, char **argv) {
     collector.close();
 
     Graph graph;
+    std::vector<NodeCoord> coords;
     std::vector<fs::path> chunks = sort_node_chunks(raw_nodes_path, temp_dir);
-    std::vector<MappingRecord> mapping = build_node_mapping(chunks, graph);
+    std::vector<MappingRecord> mapping = build_node_mapping(chunks, coords);
+    graph.vertex_count_ = static_cast<transport::VertexId>(coords.size());
     std::vector<uint8_t> has_coord(graph.vertex_count(), 0);
     {
-        CoordinateCollector coordinate_collector(mapping, graph, has_coord);
+        CoordinateCollector coordinate_collector(mapping, coords, has_coord);
         osmium::io::File infile(input);
         osmium::io::Reader reader(infile);
         osmium::apply(reader, coordinate_collector);
         reader.close();
     }
-    build_csr_edges(raw_segments_path, mapping, has_coord, graph);
+    build_csr_edges(raw_segments_path, mapping, has_coord, coords, graph);
 
     if (!transport::save_graph_binary(graph, output)) {
         std::cerr << "failed to save graph\n";
+        return 1;
+    }
+    if (!coords_output.empty() && !transport::save_coords_binary(coords, coords_output)) {
+        std::cerr << "failed to save coordinates\n";
         return 1;
     }
 

@@ -7,6 +7,8 @@
 #include <cstddef>
 #include <numbers>
 #include <random>
+#include <span>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -80,17 +82,20 @@ std::vector<VertexId> select_farthest(const Graph &graph, uint32_t landmark_coun
     return chosen;
 }
 
-std::vector<VertexId> select_planar(const Graph &graph, uint32_t landmark_count) {
+std::vector<VertexId> select_planar(const Graph &graph, uint32_t landmark_count, std::span<const NodeCoord> coords) {
     const size_t vertices = graph.vertex_count();
     if (vertices == 0 || landmark_count == 0) {
         return {};
+    }
+    if (coords.size() != vertices) {
+        throw std::invalid_argument("planar landmark selection requires coordinates matching the graph vertices");
     }
 
     landmark_count = std::min(landmark_count, static_cast<uint32_t>(vertices));
 
     double sum_lat = 0.0;
     double sum_lon = 0.0;
-    for (const NodeCoord &coord : graph.coords) {
+    for (const NodeCoord &coord : coords) {
         sum_lat += coord.lat;
         sum_lon += coord.lon;
     }
@@ -101,7 +106,7 @@ std::vector<VertexId> select_planar(const Graph &graph, uint32_t landmark_count)
     std::vector<std::pair<double, VertexId>> best_by_sector(landmark_count, {-1.0, 0});
     constexpr double kTwoPi = 2.0 * std::numbers::pi;
     for (size_t vertex = 0; vertex < vertices; ++vertex) {
-        const NodeCoord &coord = graph.coords[vertex];
+        const NodeCoord &coord = coords[vertex];
         const double angle = std::atan2(coord.lat - center_lat, coord.lon - center_lon);
         const double normalized = (angle + std::numbers::pi) / kTwoPi;
         const size_t sector = static_cast<size_t>(normalized * static_cast<double>(landmark_count)) % landmark_count;
@@ -133,7 +138,7 @@ std::vector<VertexId> select_planar(const Graph &graph, uint32_t landmark_count)
 } // namespace
 
 LandmarkSet build_landmarks(const Graph &graph, const Graph &reverse, uint32_t landmark_count,
-                            LandmarkStrategy strategy, std::mt19937 &rng) {
+                            LandmarkStrategy strategy, std::mt19937 &rng, std::span<const NodeCoord> coords) {
     const size_t vertices = graph.vertex_count();
     landmark_count = std::min(landmark_count, static_cast<uint32_t>(vertices));
 
@@ -149,7 +154,7 @@ LandmarkSet build_landmarks(const Graph &graph, const Graph &reverse, uint32_t l
         strategy_name = "farthest";
         break;
     case LandmarkStrategy::Planar:
-        chosen = select_planar(graph, landmark_count);
+        chosen = select_planar(graph, landmark_count, coords);
         strategy_name = "planar";
         break;
     default:

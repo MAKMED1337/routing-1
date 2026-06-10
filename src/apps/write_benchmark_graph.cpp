@@ -17,7 +17,12 @@ void add_edge(std::vector<std::vector<transport::Edge>> &rows, const std::vector
     rows[from].push_back(transport::Edge{to, weight});
 }
 
-transport::Graph make_grid_graph(uint32_t width, uint32_t height) {
+struct GridGraph {
+    transport::Graph graph;
+    std::vector<transport::NodeCoord> coords;
+};
+
+GridGraph make_grid_graph(uint32_t width, uint32_t height) {
     const uint32_t vertices = width * height;
     std::vector<transport::NodeCoord> coords(vertices);
     auto id = [width](uint32_t x, uint32_t y) { return y * width + x; };
@@ -47,7 +52,7 @@ transport::Graph make_grid_graph(uint32_t width, uint32_t height) {
     }
 
     transport::Graph graph;
-    graph.coords = std::move(coords);
+    graph.vertex_count_ = vertices;
     graph.offsets.assign(static_cast<size_t>(vertices) + 1, 0);
     for (uint32_t v = 0; v < vertices; ++v) {
         graph.offsets[v + 1] = graph.offsets[v] + rows[v].size();
@@ -55,24 +60,28 @@ transport::Graph make_grid_graph(uint32_t width, uint32_t height) {
     for (const std::vector<transport::Edge> &row : rows) {
         graph.edges.insert(graph.edges.end(), row.begin(), row.end());
     }
-    return graph;
+    return GridGraph{.graph = std::move(graph), .coords = std::move(coords)};
 }
 
 } // namespace
 
 int main(int argc, char **argv) {
-    if (argc != 2) {
-        std::cerr << "usage: write_benchmark_graph <output.graph>\n";
+    if (argc != 2 && argc != 3) {
+        std::cerr << "usage: write_benchmark_graph <output.graph> [coords.bin]\n";
         return 1;
     }
 
-    const transport::Graph graph = make_grid_graph(30, 30);
-    if (!transport::save_graph_binary(graph, argv[1])) {
+    const GridGraph grid = make_grid_graph(30, 30);
+    if (!transport::save_graph_binary(grid.graph, argv[1])) {
         std::cerr << "failed to save graph\n";
         return 1;
     }
+    if (argc == 3 && !transport::save_coords_binary(grid.coords, argv[2])) {
+        std::cerr << "failed to save coordinates\n";
+        return 1;
+    }
 
-    std::cout << "vertices=" << graph.vertex_count() << "\n";
-    std::cout << "directed_edges=" << graph.edge_count() << "\n";
+    std::cout << "vertices=" << grid.graph.vertex_count() << "\n";
+    std::cout << "directed_edges=" << grid.graph.edge_count() << "\n";
     return 0;
 }

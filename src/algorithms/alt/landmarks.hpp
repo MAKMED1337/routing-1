@@ -6,6 +6,7 @@
 
 #include <cstdint>
 #include <random>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -22,6 +23,6 @@ struct LandmarkSet {
 };
 
 LandmarkSet build_landmarks(const Graph &graph, const Graph &reverse, uint32_t landmark_count,
-                            LandmarkStrategy strategy, std::mt19937 &rng);
+                            LandmarkStrategy strategy, std::mt19937 &rng, std::span<const NodeCoord> coords = {});
 
 } // namespace transport::alt

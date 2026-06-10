@@ -15,12 +15,13 @@ namespace transport {
 
 namespace {
 
-constexpr uint32_t kMagicIntWeights = 0x54524732U; // TRG2
+constexpr uint32_t kMagicIntWeights = 0x54524733U; // TRG3
+constexpr uint32_t kMagicCoords = 0x43524431U;     // CRD1
 
 uint64_t stored_offset(size_t offset) {
     if constexpr (std::numeric_limits<size_t>::max() > std::numeric_limits<uint64_t>::max()) {
         if (offset > std::numeric_limits<uint64_t>::max()) {
-            throw std::runtime_error("graph offset is too large for TRG2 binary format");
+            throw std::runtime_error("graph offset is too large for TRG3 binary format");
         }
     }
     return static_cast<uint64_t>(offset);
@@ -83,7 +84,7 @@ void validate_graph(const Graph &graph, uint64_t expected_edges) {
 
 } // namespace
 
-VertexId Graph::vertex_count() const { return coords.size(); }
+VertexId Graph::vertex_count() const { return vertex_count_; }
 
 uint64_t Graph::edge_count() const { return static_cast<uint64_t>(edges.size()); }
 
@@ -100,20 +101,16 @@ bool save_graph_binary(const Graph &graph, const std::string &path) {
     }
 
     write_one(out, kMagicIntWeights);
-    // TRG2 stores the vertex count as a fixed-width header field.
+    // TRG3 stores the vertex count as a fixed-width header field.
     const VertexId vertex_count = graph.vertex_count();
     if (vertex_count > std::numeric_limits<uint32_t>::max()) {
-        throw std::runtime_error("graph has too many vertices for TRG2 binary format");
+        throw std::runtime_error("graph has too many vertices for TRG3 binary format");
     }
     const uint32_t vertices = static_cast<uint32_t>(vertex_count);
     const uint64_t edges = graph.edge_count();
     write_one(out, vertices);
     write_one(out, edges);
 
-    for (const NodeCoord &node : graph.coords) {
-        write_one(out, node.lat);
-        write_one(out, node.lon);
-    }
     for (const size_t offset : graph.offsets) {
         write_one(out, stored_offset(offset));
     }
@@ -140,11 +137,7 @@ Graph load_graph_binary(const std::string &path) {
     read_one(in, edges);
 
     Graph graph;
-    graph.coords.resize(vertices);
-    for (NodeCoord &node : graph.coords) {
-        read_one(in, node.lat);
-        read_one(in, node.lon);
-    }
+    graph.vertex_count_ = vertices;
 
     graph.offsets.resize(static_cast<size_t>(vertices) + 1);
     graph.edges.resize(static_cast<size_t>(edges));
@@ -166,6 +159,51 @@ Graph load_graph_binary(const std::string &path) {
 
     validate_graph(graph, edges);
     return graph;
+}
+
+bool save_coords_binary(std::span<const NodeCoord> coords, const std::string &path) {
+    std::ofstream out(path, std::ios::binary);
+    if (!out) {
+        return false;
+    }
+
+    write_one(out, kMagicCoords);
+    if (coords.size() > std::numeric_limits<uint32_t>::max()) {
+        throw std::runtime_error("too many coordinates for CRD1 binary format");
+    }
+    const auto vertices = static_cast<uint32_t>(coords.size());
+    write_one(out, vertices);
+    for (const NodeCoord &node : coords) {
+        write_one(out, node.lat);
+        write_one(out, node.lon);
+    }
+    return static_cast<bool>(out);
+}
+
+std::vector<NodeCoord> load_coords_binary(const std::string &path) {
+    std::ifstream in(path, std::ios::binary);
+    if (!in) {
+        throw std::runtime_error("failed to open coords file: " + path);
+    }
+
+    uint32_t magic = 0;
+    read_one(in, magic);
+    if (magic != kMagicCoords) {
+        throw std::runtime_error("invalid coords file magic");
+    }
+
+    uint32_t vertices = 0;
+    read_one(in, vertices);
+
+    std::vector<NodeCoord> coords(vertices);
+    for (NodeCoord &node : coords) {
+        read_one(in, node.lat);
+        read_one(in, node.lon);
+        if (!in) {
+            throw std::runtime_error("corrupted coords file");
+        }
+    }
+    return coords;
 }
 
 double haversine_meters(const NodeCoord &a, const NodeCoord &b) {

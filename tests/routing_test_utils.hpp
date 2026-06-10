@@ -14,7 +14,7 @@ namespace transport::test {
 
 inline Graph make_graph(uint32_t vertices, const std::vector<std::vector<Edge>> &rows) {
     Graph graph;
-    graph.coords.resize(vertices);
+    graph.vertex_count_ = vertices;
     graph.offsets.assign(static_cast<size_t>(vertices) + 1, 0);
     for (uint32_t v = 0; v < vertices; ++v) {
         graph.offsets[v + 1] = graph.offsets[v] + rows[v].size();

@@ -3,10 +3,12 @@
 #include "graph_fixtures.hpp"
 
 #include <iostream>
+#include <span>
 #include <stdexcept>
 
-bool check_valid_partition(const transport::Graph &graph, uint16_t regions, transport::PartitionMethod method) {
-    const auto result = transport::build_partition(graph, regions, method);
+bool check_valid_partition(const transport::Graph &graph, uint16_t regions, transport::PartitionMethod method,
+                           std::span<const transport::NodeCoord> coords = {}) {
+    const auto result = transport::build_partition(graph, regions, method, coords);
     if (result.size() != graph.vertex_count()) {
         std::cerr << "partition: wrong result size (regions=" << regions << ")\n";
         return false;
@@ -21,16 +23,18 @@ bool check_valid_partition(const transport::Graph &graph, uint16_t regions, tran
 }
 
 bool check_partition() {
-    const transport::Graph graph = transport::test::make_coord_graph();
+    const transport::test::GraphWithCoords fixture = transport::test::make_coord_graph();
+    const transport::Graph &graph = fixture.graph;
+    const std::span<const transport::NodeCoord> coords = fixture.coords;
 
     for (const uint16_t regions : {uint16_t{1}, uint16_t{4}, uint16_t{9}}) {
-        if (!check_valid_partition(graph, regions, transport::PartitionMethod::Grid)) {
+        if (!check_valid_partition(graph, regions, transport::PartitionMethod::Grid, coords)) {
             return false;
         }
     }
 
     for (const uint16_t regions : {uint16_t{1}, uint16_t{2}, uint16_t{4}}) {
-        if (!check_valid_partition(graph, regions, transport::PartitionMethod::Inertial)) {
+        if (!check_valid_partition(graph, regions, transport::PartitionMethod::Inertial, coords)) {
             return false;
         }
     }
@@ -38,7 +42,7 @@ bool check_partition() {
     // Inertial must throw on non-power-of-2 region count.
     bool threw = false;
     try {
-        (void)transport::build_partition(graph, uint16_t{3}, transport::PartitionMethod::Inertial);
+        (void)transport::build_partition(graph, uint16_t{3}, transport::PartitionMethod::Inertial, coords);
     } catch (const std::invalid_argument &) {
         threw = true;
     }
@@ -54,6 +58,21 @@ bool check_partition() {
         }
     }
 #endif
+
+    // Grid and inertial must throw when coordinates are missing or mismatched.
+    for (const transport::PartitionMethod method :
+         {transport::PartitionMethod::Grid, transport::PartitionMethod::Inertial}) {
+        bool coords_threw = false;
+        try {
+            (void)transport::build_partition(graph, uint16_t{4}, method);
+        } catch (const std::invalid_argument &) {
+            coords_threw = true;
+        }
+        if (!coords_threw) {
+            std::cerr << "partition: expected throw for missing coordinates\n";
+            return false;
+        }
+    }
 
     // parse_partition_method / partition_method_name round-trip.
     for (const char *name : {"grid", "inertial", "kaminpar"}) {
