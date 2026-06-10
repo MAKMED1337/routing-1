@@ -129,3 +129,4 @@ Every benchmark run writes a JSON file to `results/`. Rules:
 - If the user asks to only plan, do not perform implementation edits.
 - If asked to implement, carry through code, build checks, and a concise result summary.
 - If environment constraints block a requested step, report the exact blocker.
+- Commit messages must follow the existing prefix style: `feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`, etc. Use a short imperative subject after the prefix.
