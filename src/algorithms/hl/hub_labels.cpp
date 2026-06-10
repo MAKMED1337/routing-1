@@ -235,10 +235,10 @@ void HubLabelsAlgorithm::build_labels() {
 
 // ----- collect (shared upward-search helper) -----
 
-void HubLabelsAlgorithm::collect(VertexId start, const std::vector<uint64_t> &ch_offsets,
-                                 const std::vector<Edge> &ch_edges, const std::vector<uint64_t> &label_offsets,
-                                 const std::vector<HlEntry> &label_data, StampedVector<Distance> &scratch,
-                                 std::vector<HlEntry> &out, std::vector<VertexId> &unlabeled_settled) const {
+uint32_t HubLabelsAlgorithm::collect(VertexId start, const std::vector<uint64_t> &ch_offsets,
+                                     const std::vector<Edge> &ch_edges, const std::vector<uint64_t> &label_offsets,
+                                     const std::vector<HlEntry> &label_data, StampedVector<Distance> &scratch,
+                                     std::vector<HlEntry> &out, std::vector<VertexId> &unlabeled_settled) const {
     std::unordered_map<VertexId, Distance> hub_best;
     hub_best.reserve(256);
 
@@ -246,12 +246,14 @@ void HubLabelsAlgorithm::collect(VertexId start, const std::vector<uint64_t> &ch
     scratch.set(start, Distance{0});
     pq.push({Distance{0}, start});
 
+    uint32_t settled = 0;
     while (!pq.empty()) {
         const HeapNode top = pq.top();
         pq.pop();
         if (top.key != scratch.get(top.v)) {
             continue;
         }
+        ++settled;
         if (is_labeled(top.v)) {
             const auto label_span =
                 std::span(label_data.data() + label_offsets[top.v], label_data.data() + label_offsets[top.v + 1]);
@@ -282,14 +284,20 @@ void HubLabelsAlgorithm::collect(VertexId start, const std::vector<uint64_t> &ch
         out.push_back({h, d});
     }
     std::sort(out.begin(), out.end());
+    return settled;
 }
 
 // ----- query -----
 
 PathResult HubLabelsAlgorithm::query(VertexId source, VertexId target) const {
+    if (!preprocessed_) {
+        throw std::logic_error("HubLabelsAlgorithm::preprocess() must be called before query()");
+    }
+
     const bool s_lab = is_labeled(source);
     const bool t_lab = is_labeled(target);
     Distance dist = kUnreachable;
+    uint32_t settled = 0;
 
     if (s_lab && t_lab) {
         dist = intersect_labels(fwd_label(source), bwd_label(target));
@@ -297,16 +305,16 @@ PathResult HubLabelsAlgorithm::query(VertexId source, VertexId target) const {
         // source labeled, target unlabeled
         bwd_scratch_.reset();
         std::vector<VertexId> dummy;
-        collect(target, ch_.backward_offsets, ch_.backward_edges, bwd_offsets_, bwd_labels_, bwd_scratch_,
-                collect_buf_bwd_, dummy);
+        settled = collect(target, ch_.backward_offsets, ch_.backward_edges, bwd_offsets_, bwd_labels_, bwd_scratch_,
+                          collect_buf_bwd_, dummy);
         bwd_scratch_.reset();
         dist = intersect_labels(fwd_label(source), collect_buf_bwd_);
     } else if (t_lab) {
         // source unlabeled, target labeled
         fwd_scratch_.reset();
         std::vector<VertexId> dummy;
-        collect(source, ch_.forward_offsets, ch_.forward_edges, fwd_offsets_, fwd_labels_, fwd_scratch_,
-                collect_buf_fwd_, dummy);
+        settled = collect(source, ch_.forward_offsets, ch_.forward_edges, fwd_offsets_, fwd_labels_, fwd_scratch_,
+                          collect_buf_fwd_, dummy);
         fwd_scratch_.reset();
         dist = intersect_labels(collect_buf_fwd_, bwd_label(target));
     } else {
@@ -316,10 +324,11 @@ PathResult HubLabelsAlgorithm::query(VertexId source, VertexId target) const {
 
         std::vector<VertexId> fwd_unlabeled;
         std::vector<VertexId> bwd_unlabeled;
-        collect(source, ch_.forward_offsets, ch_.forward_edges, fwd_offsets_, fwd_labels_, fwd_scratch_,
-                collect_buf_fwd_, fwd_unlabeled);
-        collect(target, ch_.backward_offsets, ch_.backward_edges, bwd_offsets_, bwd_labels_, bwd_scratch_,
-                collect_buf_bwd_, bwd_unlabeled);
+        const uint32_t fwd_settled = collect(source, ch_.forward_offsets, ch_.forward_edges, fwd_offsets_, fwd_labels_,
+                                             fwd_scratch_, collect_buf_fwd_, fwd_unlabeled);
+        const uint32_t bwd_settled = collect(target, ch_.backward_offsets, ch_.backward_edges, bwd_offsets_,
+                                             bwd_labels_, bwd_scratch_, collect_buf_bwd_, bwd_unlabeled);
+        settled = fwd_settled + bwd_settled;
 
         // mu_low: min dist_fwd[v] + dist_bwd[v] over fwd-settled unlabeled vertices.
         Distance mu_low = kUnreachable;
@@ -338,7 +347,7 @@ PathResult HubLabelsAlgorithm::query(VertexId source, VertexId target) const {
         dist = std::min(mu_low, intersect_labels(collect_buf_fwd_, collect_buf_bwd_));
     }
 
-    return {dist, 0};
+    return {dist, settled};
 }
 
 } // namespace transport

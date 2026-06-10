@@ -8,7 +8,7 @@
 
 #include <cstdint>
 #include <span>
-#include <string>
+#include <string_view>
 #include <vector>
 
 namespace transport {
@@ -109,10 +109,11 @@ private:
     // Upward CH search from `start`, stopping at labeled vertices and collecting
     // their labels from `label_offsets`/`label_data`.  Settled unlabeled vertices
     // appended to `unlabeled_settled`; caller resets `scratch` before and after.
-    void collect(VertexId start, const std::vector<uint64_t> &ch_offsets, const std::vector<Edge> &ch_edges,
-                 const std::vector<uint64_t> &label_offsets, const std::vector<HlEntry> &label_data,
-                 StampedVector<Distance> &scratch, std::vector<HlEntry> &out,
-                 std::vector<VertexId> &unlabeled_settled) const;
+    // Returns the number of vertices actually settled (popped with a valid key).
+    uint32_t collect(VertexId start, const std::vector<uint64_t> &ch_offsets, const std::vector<Edge> &ch_edges,
+                     const std::vector<uint64_t> &label_offsets, const std::vector<HlEntry> &label_data,
+                     StampedVector<Distance> &scratch, std::vector<HlEntry> &out,
+                     std::vector<VertexId> &unlabeled_settled) const;
 };
 
 } // namespace transport

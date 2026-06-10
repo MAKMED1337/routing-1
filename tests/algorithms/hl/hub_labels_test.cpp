@@ -21,11 +21,24 @@ bool check_hl_validation() {
     return ok;
 }
 
+bool check_hl_query_before_preprocess_throws() {
+    const transport::Graph graph = transport::test::make_line_graph();
+    transport::HubLabelsAlgorithm hl(graph, 1.0, 4ULL * 1024 * 1024 * 1024, 1);
+    try {
+        (void)hl.query(0, 1);
+    } catch (const std::logic_error &) {
+        return true;
+    }
+    std::cerr << "hl: expected std::logic_error when querying before preprocess()\n";
+    return false;
+}
+
 } // namespace
 
 int main() {
     bool ok = true;
     ok &= check_hl_validation();
+    ok &= check_hl_query_before_preprocess_throws();
     if (!ok) {
         std::cerr << "hub_labels tests FAILED\n";
         return 1;
