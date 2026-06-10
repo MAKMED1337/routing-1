@@ -47,11 +47,13 @@ add_library(transport_core
   src/algorithms/alt/alt.cpp
   src/algorithms/alt/landmarks.cpp
   src/algorithms/astar.cpp
+  src/algorithms/ch/ch_io.cpp
   src/algorithms/ch/contraction_hierarchy.cpp
   src/algorithms/ch/node_order.cpp
   src/algorithms/ch/witness_search.cpp
   src/algorithms/ch/work_graph.cpp
   src/algorithms/arcflags/arc_flags.cpp
+  src/algorithms/arcflags/arc_flags_io.cpp
   src/algorithms/chase/chase.cpp
   src/algorithms/hl/hub_labels.cpp
   src/algorithms/bidirectional_astar.cpp
@@ -119,6 +121,9 @@ if(BUILD_TESTING)
   add_executable(arcflags_tests tests/algorithms/arcflags/arc_flags_test.cpp)
   target_include_directories(arcflags_tests PRIVATE tests)
   target_link_libraries(arcflags_tests PRIVATE transport_core project_warnings)
+  add_executable(ch_io_tests tests/algorithms/ch/ch_io_test.cpp)
+  target_include_directories(ch_io_tests PRIVATE tests)
+  target_link_libraries(ch_io_tests PRIVATE transport_core project_warnings)
 endif()
 
 add_executable(write_benchmark_graph src/apps/write_benchmark_graph.cpp)
@@ -148,4 +153,5 @@ if(BUILD_TESTING)
   add_test(NAME chase COMMAND chase_tests)
   add_test(NAME hl COMMAND hl_tests)
   add_test(NAME arcflags COMMAND arcflags_tests)
+  add_test(NAME ch_io COMMAND ch_io_tests)
 endif()

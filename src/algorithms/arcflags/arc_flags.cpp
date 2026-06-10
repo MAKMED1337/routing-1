@@ -22,6 +22,33 @@ namespace {
 // Backward Dijkstras batched per forward sweep. Larger values reduce sweep count but raise
 // peak memory proportionally (V * kBatchSize * sizeof(Distance) bytes per work item).
 constexpr size_t kBatchSize = 8;
+
+void validate_arcflags_parameters(uint16_t regions, PartitionMethod partition_method, uint32_t threads) {
+    if (regions == 0 || regions > 64) {
+        throw std::invalid_argument("arcflags: regions must be in [1, 64]");
+    }
+    if (threads == 0) {
+        throw std::invalid_argument("arcflags: threads must be >= 1");
+    }
+    if (partition_method == PartitionMethod::Inertial && !std::has_single_bit(regions)) {
+        throw std::invalid_argument("arcflags: inertial partition requires regions to be a power of two");
+    }
+}
+
+void validate_loaded_arcflags(const Graph &graph, const ArcFlagsPreprocessedData &data) {
+    validate_arcflags_parameters(data.regions, data.partition_method, 1);
+    if (data.region_of.size() != graph.vertex_count()) {
+        throw std::invalid_argument("arcflags: loaded region count does not match graph vertex count");
+    }
+    if (data.forward_flags.size() != graph.edges.size()) {
+        throw std::invalid_argument("arcflags: loaded flag count does not match graph edge count");
+    }
+    for (const uint16_t region : data.region_of) {
+        if (region >= data.regions) {
+            throw std::invalid_argument("arcflags: loaded region id out of range");
+        }
+    }
+}
 } // namespace
 
 ArcFlagsAlgorithm::ArcFlagsAlgorithm(const Graph &graph, PhastAlgorithm &&phast, uint16_t regions,
@@ -29,15 +56,16 @@ ArcFlagsAlgorithm::ArcFlagsAlgorithm(const Graph &graph, PhastAlgorithm &&phast,
                                      std::span<const NodeCoord> coords)
     : graph_(graph), phast_(std::move(phast)), regions_(regions), partition_method_(partition_method),
       threads_(threads), coords_(coords), dist_(graph.vertex_count(), kUnreachable) {
-    if (regions == 0 || regions > 64) {
-        throw std::invalid_argument("arcflags: regions must be in [1, 64]");
+    validate_arcflags_parameters(regions, partition_method, threads);
+    if (phast_->vertex_count() != graph.vertex_count()) {
+        throw std::invalid_argument("arcflags: PHAST vertex count does not match graph");
     }
-    if (threads == 0) {
-        throw std::invalid_argument("arcflags: threads must be >= 1");
-    }
-    if (partition_method_ == PartitionMethod::Inertial && !std::has_single_bit(regions)) {
-        throw std::invalid_argument("arcflags: inertial partition requires regions to be a power of two");
-    }
+}
+
+ArcFlagsAlgorithm::ArcFlagsAlgorithm(const Graph &graph, ArcFlagsPreprocessedData &&data)
+    : graph_(graph), regions_(data.regions), partition_method_(data.partition_method), threads_(1),
+      dist_(graph.vertex_count(), kUnreachable) {
+    load_preprocessed(std::move(data));
 }
 
 std::string_view ArcFlagsAlgorithm::name() const { return "arcflags"; }
@@ -49,6 +77,10 @@ void ArcFlagsAlgorithm::preprocess() {
 
     const VertexId V = graph_.vertex_count();
     const size_t E = graph_.edges.size();
+
+    if (!phast_) {
+        throw std::logic_error("arcflags: PHAST dependency is required to preprocess()");
+    }
 
     region_of_ = build_partition(graph_, regions_, partition_method_, coords_);
 
@@ -124,7 +156,7 @@ void ArcFlagsAlgorithm::compute_flags(const std::vector<std::vector<VertexId>> &
             batch.assign(bvs.begin() + static_cast<ptrdiff_t>(bs),
                          bvs.begin() + static_cast<ptrdiff_t>(bs + batch_size));
 
-            phast_.all_to_one_batch(batch, dist);
+            phast_->all_to_one_batch(batch, dist);
             // dist[v * B + lane] = d(v, batch[lane])
             const size_t B = batch_size;
 
@@ -156,6 +188,27 @@ void ArcFlagsAlgorithm::compute_flags(const std::vector<std::vector<VertexId>> &
     for (auto &th : pool) {
         th.join();
     }
+}
+
+void ArcFlagsAlgorithm::load_preprocessed(ArcFlagsPreprocessedData &&data) {
+    validate_loaded_arcflags(graph_, data);
+    regions_ = data.regions;
+    partition_method_ = data.partition_method;
+    region_of_ = std::move(data.region_of);
+    forward_flags_ = std::move(data.forward_flags);
+    preprocessed_ = true;
+}
+
+ArcFlagsPreprocessedData ArcFlagsAlgorithm::export_preprocessed() const {
+    if (!preprocessed_) {
+        throw std::logic_error("arcflags: preprocess() must be called before export_preprocessed()");
+    }
+    return ArcFlagsPreprocessedData{
+        .regions = regions_,
+        .partition_method = partition_method_,
+        .region_of = region_of_,
+        .forward_flags = forward_flags_,
+    };
 }
 
 PathResult ArcFlagsAlgorithm::query(VertexId source, VertexId target) const {
