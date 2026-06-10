@@ -11,7 +11,6 @@
 #include <bit>
 #include <cstdint>
 #include <numeric>
-#include <queue>
 #include <stdexcept>
 #include <string_view>
 #include <vector>
@@ -150,8 +149,8 @@ PathResult ChaseAlgorithm::query(VertexId source, VertexId target) const {
     fwd_dist_.set(source, 0);
     bwd_dist_.set(target, 0);
 
-    std::priority_queue<HeapNode, std::vector<HeapNode>, std::greater<HeapNode>> fwd_pq;
-    std::priority_queue<HeapNode, std::vector<HeapNode>, std::greater<HeapNode>> bwd_pq;
+    HeapQueue fwd_pq;
+    HeapQueue bwd_pq;
     fwd_pq.push({0, source});
     bwd_pq.push({0, target});
 
@@ -219,8 +218,8 @@ PathResult ChaseAlgorithm::query(VertexId source, VertexId target) const {
             source_mask |= cf_reach_[v];
         }
 
-        std::priority_queue<HeapNode, std::vector<HeapNode>, std::greater<HeapNode>> cf_pq;
-        std::priority_queue<HeapNode, std::vector<HeapNode>, std::greater<HeapNode>> cb_pq;
+        HeapQueue cf_pq;
+        HeapQueue cb_pq;
 
         for (const auto &[v, d] : fwd_entries) {
             if (d < fwd_dist_.get(v)) {

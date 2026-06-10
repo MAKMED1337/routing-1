@@ -2,9 +2,6 @@
 
 #include "algorithms/heap_node.hpp"
 
-#include <functional>
-#include <queue>
-
 namespace transport::ch {
 
 WitnessSearch::WitnessSearch(size_t vertices) : table_(vertices, Cell{kInf, 0}) {}
@@ -14,7 +11,7 @@ Distance WitnessSearch::run(const WorkGraph &graph, VertexId source, VertexId ta
     ++calls_;
     table_.reset();
 
-    std::priority_queue<HeapNode, std::vector<HeapNode>, std::greater<>> pq;
+    HeapQueue pq;
     table_.set(source, Cell{0, 0});
     pq.push(HeapNode{0, source});
 

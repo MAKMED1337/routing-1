@@ -4,8 +4,6 @@
 #include "routing/routing.hpp"
 
 #include <algorithm>
-#include <functional>
-#include <queue>
 #include <vector>
 
 namespace transport {
@@ -103,7 +101,7 @@ void PhastAlgorithm::all_to_one_batch(std::span<const VertexId> targets, std::ve
     for (size_t lane = 0; lane < B; ++lane) {
         const VertexId tr = vertex_to_rank[targets[lane]];
         dist_rank[tr * B + lane] = 0;
-        std::priority_queue<HeapNode, std::vector<HeapNode>, std::greater<>> pq;
+        HeapQueue pq;
         pq.push({0, tr});
         while (!pq.empty()) {
             const HeapNode top = pq.top();

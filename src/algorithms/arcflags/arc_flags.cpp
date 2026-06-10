@@ -12,7 +12,6 @@
 #include <atomic>
 #include <bit>
 #include <cstdint>
-#include <queue>
 #include <stdexcept>
 #include <string_view>
 #include <thread>
@@ -181,7 +180,7 @@ PathResult ArcFlagsAlgorithm::query(VertexId source, VertexId target) const {
     dist_.reset();
     dist_.set(source, 0);
 
-    std::priority_queue<HeapNode, std::vector<HeapNode>, std::greater<HeapNode>> pq;
+    HeapQueue pq;
     pq.push({0, source});
 
     uint32_t settled = 0;

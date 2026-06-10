@@ -4,10 +4,7 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <functional>
-#include <queue>
 #include <string_view>
-#include <vector>
 
 namespace transport {
 
@@ -17,7 +14,7 @@ std::string_view DijkstraAlgorithm::name() const { return "dijkstra"; }
 
 PathResult DijkstraAlgorithm::query(VertexId source, VertexId target) const {
     dist_.reset();
-    std::priority_queue<HeapNode, std::vector<HeapNode>, std::greater<>> pq;
+    HeapQueue pq;
     dist_.set(source, 0);
     pq.push({0, source});
 

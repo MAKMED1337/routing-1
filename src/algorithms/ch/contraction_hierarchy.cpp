@@ -134,9 +134,8 @@ std::pair<ContractionHierarchy, PreprocessStats> build_contraction_hierarchy(con
 // Pops and relaxes one node from `pq` in its direction. `dist` is this direction's stamped distances,
 // `opposite_dist` the other direction's; when both meet at a node, `best` is tightened. Returns false
 // when the popped entry was a stale duplicate (no node was settled).
-bool settle_next(std::priority_queue<HeapNode, std::vector<HeapNode>, std::greater<>> &pq,
-                 const std::vector<uint64_t> &offsets, const std::vector<Edge> &edges, StampedVector<Distance> &dist,
-                 const StampedVector<Distance> &opposite_dist, Distance &best) {
+bool settle_next(HeapQueue &pq, const std::vector<uint64_t> &offsets, const std::vector<Edge> &edges,
+                 StampedVector<Distance> &dist, const StampedVector<Distance> &opposite_dist, Distance &best) {
     const HeapNode top = pq.top();
     pq.pop();
     if (top.key != dist.get(top.v)) {
@@ -201,8 +200,8 @@ PathResult ContractionHierarchyAlgorithm::query(VertexId source, VertexId target
 
     forward_dist_.reset();
     backward_dist_.reset();
-    std::priority_queue<HeapNode, std::vector<HeapNode>, std::greater<>> forward_pq;
-    std::priority_queue<HeapNode, std::vector<HeapNode>, std::greater<>> backward_pq;
+    HeapQueue forward_pq;
+    HeapQueue backward_pq;
 
     forward_dist_.set(source, 0);
     backward_dist_.set(target, 0);

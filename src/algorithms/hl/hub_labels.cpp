@@ -6,8 +6,6 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
-#include <functional>
-#include <queue>
 #include <span>
 #include <stdexcept>
 #include <string_view>
@@ -17,8 +15,6 @@
 namespace transport {
 
 namespace {
-
-using Pq = std::priority_queue<HeapNode, std::vector<HeapNode>, std::greater<HeapNode>>;
 
 // a + b, saturating at kUnreachable instead of wrapping around.
 constexpr Distance saturating_add(Distance a, Distance b) { return a <= kUnreachable - b ? a + b : kUnreachable; }
@@ -230,7 +226,7 @@ uint32_t HubLabelsAlgorithm::collect(VertexId start, bool forward, std::vector<H
     StampedVector<Distance> &scratch = forward ? fwd_scratch_ : bwd_scratch_;
 
     std::unordered_map<VertexId, Distance> hub_best;
-    Pq pq;
+    HeapQueue pq;
     scratch.set(start, Distance{0});
     pq.push({Distance{0}, start});
 

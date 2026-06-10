@@ -6,8 +6,6 @@
 
 #include <algorithm>
 #include <concepts>
-#include <functional>
-#include <queue>
 #include <ranges>
 #include <vector>
 
@@ -21,7 +19,7 @@ concept AdjacencyFn = std::invocable<F, VertexId> && std::ranges::range<std::inv
 template <AdjacencyFn F> void dijkstra_one_to_all(F adjacent_edges, VertexId source, std::vector<Distance> &dist) {
     std::fill(dist.begin(), dist.end(), kUnreachable);
     dist[source] = 0;
-    std::priority_queue<HeapNode, std::vector<HeapNode>, std::greater<>> pq;
+    HeapQueue pq;
     pq.push({0, source});
     while (!pq.empty()) {
         const HeapNode top = pq.top();

@@ -2,10 +2,7 @@
 
 #include "algorithms/heap_node.hpp"
 
-#include <functional>
-#include <queue>
 #include <string_view>
-#include <vector>
 
 namespace transport {
 
@@ -16,7 +13,7 @@ std::string_view AStarAlgorithm::name() const { return "astar"; }
 
 PathResult AStarAlgorithm::query(VertexId source, VertexId target) const {
     g_.reset();
-    std::priority_queue<HeapNode, std::vector<HeapNode>, std::greater<>> pq;
+    HeapQueue pq;
 
     g_.set(source, 0);
     pq.push({heuristic_(source, target), source});

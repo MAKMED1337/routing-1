@@ -3,11 +3,8 @@
 #include "algorithms/heap_node.hpp"
 
 #include <algorithm>
-#include <functional>
-#include <queue>
 #include <stdexcept>
 #include <string_view>
-#include <vector>
 
 namespace transport {
 
@@ -38,8 +35,8 @@ PathResult BidirectionalAStarAlgorithm::query(VertexId source, VertexId target) 
         return distance + heuristic_(source, vertex);
     };
 
-    std::priority_queue<HeapNode, std::vector<HeapNode>, std::greater<>> forward_pq;
-    std::priority_queue<HeapNode, std::vector<HeapNode>, std::greater<>> backward_pq;
+    HeapQueue forward_pq;
+    HeapQueue backward_pq;
 
     forward_dist_.set(source, 0);
     backward_dist_.set(target, 0);
@@ -55,10 +52,8 @@ PathResult BidirectionalAStarAlgorithm::query(VertexId source, VertexId target) 
         }
     };
 
-    auto settle_next = [&settled,
-                        &update_best](std::priority_queue<HeapNode, std::vector<HeapNode>, std::greater<>> &pq,
-                                      const Graph &search_graph, StampedVector<Distance> &dist,
-                                      const StampedVector<Distance> &opposite_dist, const auto &key_for) {
+    auto settle_next = [&settled, &update_best](HeapQueue &pq, const Graph &search_graph, StampedVector<Distance> &dist,
+                                                const StampedVector<Distance> &opposite_dist, const auto &key_for) {
         const HeapNode top = pq.top();
         pq.pop();
 
