@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <random>
+#include <stdexcept>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -50,13 +51,23 @@ alt::LandmarkSet default_landmarks(const Graph &graph) {
 
 } // namespace
 
-AltAlgorithm::AltAlgorithm(const Graph &graph) : AltAlgorithm(graph, default_landmarks(graph), 4) {}
+AltAlgorithm::AltAlgorithm(const Graph &graph)
+    : graph_(graph), active_landmarks_(4), landmarks_{}, preprocessed_(false),
+      astar_(graph, [this](VertexId vertex, VertexId target) { return potential(vertex, target); }) {}
 
 AltAlgorithm::AltAlgorithm(const Graph &graph, alt::LandmarkSet landmarks, uint32_t active_landmarks)
-    : graph_(graph), active_landmarks_(active_landmarks), landmarks_(std::move(landmarks)),
+    : graph_(graph), active_landmarks_(active_landmarks), landmarks_(std::move(landmarks)), preprocessed_(true),
       astar_(graph, [this](VertexId vertex, VertexId target) { return potential(vertex, target); }) {}
 
 std::string_view AltAlgorithm::name() const { return "alt"; }
+
+void AltAlgorithm::preprocess() {
+    if (preprocessed_) {
+        return;
+    }
+    landmarks_ = default_landmarks(graph_);
+    preprocessed_ = true;
+}
 
 uint64_t AltAlgorithm::landmark_table_bytes() const {
     return static_cast<uint64_t>((landmarks_.dist_from.size() + landmarks_.dist_to.size()) * sizeof(Distance));
@@ -85,6 +96,9 @@ void AltAlgorithm::select_active(VertexId source, VertexId target) const {
 }
 
 PathResult AltAlgorithm::query(VertexId source, VertexId target) const {
+    if (!preprocessed_) {
+        throw std::logic_error("AltAlgorithm::query called before preprocess()");
+    }
     select_active(source, target);
     return astar_.query(source, target);
 }
