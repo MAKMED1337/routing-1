@@ -12,6 +12,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <optional>
 #include <set>
 #include <string>
 #include <string_view>
@@ -64,7 +65,7 @@ bench::Json preprocess_to_json(const PreprocessReport &report, const RoutingAlgo
 struct QueryPair {
     VertexId source;
     VertexId target;
-    Distance expected_distance;
+    std::optional<Distance> expected_distance;
 };
 
 struct PairsFile {
@@ -73,15 +74,15 @@ struct PairsFile {
     uint64_t graph_vertices = 0;
     uint64_t graph_directed_edges = 0;
     uint32_t seed = 0;
-    uint32_t min_settled = 0;
-    uint32_t max_settled = 0;
+    std::optional<uint32_t> min_settled;
+    std::optional<uint32_t> max_settled;
     std::vector<QueryPair> pairs;
 };
 
-PairsFile load_pairs(const std::string &path) {
+PairsFile load_pairs(const fs::path &path) {
     std::ifstream f(path);
     if (!f) {
-        throw std::runtime_error("cannot open query pairs file: " + path);
+        throw std::runtime_error("cannot open query pairs file: " + path.string());
     }
     const bench::Json j = bench::Json::parse(f);
 
@@ -93,15 +94,19 @@ PairsFile load_pairs(const std::string &path) {
     pf.graph_vertices = j.at("graph").at("vertices").get<uint64_t>();
     pf.graph_directed_edges = j.at("graph").at("directed_edges").get<uint64_t>();
     pf.seed = j.at("seed").get<uint32_t>();
-    pf.min_settled = j.at("filters").at("min_settled").get<uint32_t>();
-    pf.max_settled = j.at("filters").at("max_settled").get<uint32_t>();
+    if (j.contains("filters")) {
+        pf.min_settled = j.at("filters").at("min_settled").get<uint32_t>();
+        pf.max_settled = j.at("filters").at("max_settled").get<uint32_t>();
+    }
 
     for (const auto &p : j.at("pairs")) {
-        pf.pairs.push_back(QueryPair{
-            static_cast<VertexId>(p.at("source").get<uint64_t>()),
-            static_cast<VertexId>(p.at("target").get<uint64_t>()),
-            p.at("distance").get<Distance>(),
-        });
+        QueryPair pair;
+        pair.source = p.at("source").get<VertexId>();
+        pair.target = p.at("target").get<VertexId>();
+        if (p.contains("distance")) {
+            pair.expected_distance = p.at("distance").get<Distance>();
+        }
+        pf.pairs.push_back(std::move(pair));
     }
     return pf;
 }
@@ -109,18 +114,20 @@ PairsFile load_pairs(const std::string &path) {
 } // namespace
 
 int main(int argc, char **argv) {
-    std::string graph_path;
-    std::string coords_path;
-    std::string source_path;
-    std::string pairs_path;
+    fs::path graph_path;
+    fs::path coords_path;
+    fs::path source_path;
+    fs::path pairs_path;
+    fs::path out_path;
     std::string algorithm_name;
     std::string variant;
-    std::string out_path;
     RoutingPreprocessingContext context;
 
-    CLI::App app{"Replay saved Dijkstra query pairs against one routing algorithm.\n"
+    CLI::App app{"Replay saved query pairs against one routing algorithm.\n"
                  "Loads a single algorithm per process for clean RSS accounting.\n"
-                 "Validates every candidate distance against the saved Dijkstra distance."};
+                 "When pairs carry reference distances (ranged-dijkstra selection), validates every\n"
+                 "candidate distance. Random-selection pairs have no reference distances; replay\n"
+                 "measures query times only."};
     app.add_option("--graph", graph_path, "Path to graph binary")->required()->check(CLI::ExistingFile);
     app.add_option("--coords", coords_path, "Path to coordinates binary")->check(CLI::ExistingFile);
     app.add_option("--source", source_path, "Original source file path (e.g. OSM PBF) for output metadata");
@@ -158,13 +165,12 @@ int main(int argc, char **argv) {
             }
         }
     }
-    const fs::path output_path(out_path);
-    if (fs::exists(output_path)) {
+    if (fs::exists(out_path)) {
         std::cerr << "output file already exists: " << out_path << "\n";
         return 1;
     }
-    if (output_path.has_parent_path()) {
-        fs::create_directories(output_path.parent_path());
+    if (out_path.has_parent_path()) {
+        fs::create_directories(out_path.parent_path());
     }
 
     PairsFile pf;
@@ -222,16 +228,20 @@ int main(int argc, char **argv) {
     agg.pruned_by_flag.reserve(pf.pairs.size());
 
     uint64_t mismatches = 0;
+    bool distance_validated = false;
     for (const auto &pair : pf.pairs) {
         const Stopwatch q_sw;
         const transport::PathResult result = algo.query(pair.source, pair.target);
         const std::chrono::nanoseconds q_wall = q_sw.wall_elapsed();
         const std::chrono::nanoseconds q_cpu = q_sw.cpu_elapsed();
 
-        if (result.distance_units != pair.expected_distance) {
-            std::cerr << "distance mismatch: source=" << pair.source << " target=" << pair.target
-                      << " expected=" << pair.expected_distance << " got=" << result.distance_units << "\n";
-            ++mismatches;
+        if (pair.expected_distance) {
+            distance_validated = true;
+            if (result.distance_units != *pair.expected_distance) {
+                std::cerr << "distance mismatch: source=" << pair.source << " target=" << pair.target
+                          << " expected=" << *pair.expected_distance << " got=" << result.distance_units << "\n";
+                ++mismatches;
+            }
         }
 
         agg.query_wall.push_back(q_wall);
@@ -243,14 +253,14 @@ int main(int argc, char **argv) {
         agg.pruned_by_flag.push_back(result.stats.pruned_by_flag);
     }
 
-    if (mismatches > 0) {
+    if (distance_validated && mismatches > 0) {
         std::cerr << mismatches << " distance mismatch(es) detected\n";
     }
 
     bench::Json graph_obj;
-    graph_obj["path"] = graph_path;
+    graph_obj["path"] = graph_path.string();
     if (!source_path.empty()) {
-        graph_obj["source"] = source_path;
+        graph_obj["source"] = source_path.string();
     } else if (!pf.graph_source.empty()) {
         graph_obj["source"] = pf.graph_source;
     }
@@ -262,18 +272,23 @@ int main(int argc, char **argv) {
     j["variant"] = variant;
     j["date"] = bench::current_datetime_iso();
     j["graph"] = std::move(graph_obj);
-    j["query_set"] = pairs_path;
+    j["query_set"] = pairs_path.string();
     j["distance_scale"] = transport::kDistanceScale;
     j["load_wall_s"] = to_seconds(load_wall);
     j["load_cpu_s"] = to_seconds(load_cpu);
     j["after_load_peak_rss_mb"] = after_load_rss;
     j["preprocessing"] = preprocess_to_json(instance->stats, algo);
-    j["query_set_filters"] = bench::Json{{"min_settled", pf.min_settled}, {"max_settled", pf.max_settled}};
+    if (pf.min_settled) {
+        j["query_set_filters"] = bench::Json{{"min_settled", *pf.min_settled}, {"max_settled", *pf.max_settled}};
+    }
     {
         bench::Json queries_j = bench::aggregate_to_json(agg);
         queries_j["count"] = pf.pairs.size();
         queries_j["seed"] = pf.seed;
-        queries_j["distance_mismatches"] = mismatches;
+        queries_j["distance_validated"] = distance_validated;
+        if (distance_validated) {
+            queries_j["distance_mismatches"] = mismatches;
+        }
         j["queries"] = std::move(queries_j);
     }
 
@@ -286,7 +301,10 @@ int main(int argc, char **argv) {
 
     std::cout << "algorithm=" << algo.name() << "\n";
     std::cout << "queries=" << pf.pairs.size() << "\n";
-    std::cout << "mismatches=" << mismatches << "\n";
-    std::cout << "output=" << out_path << "\n";
-    return mismatches == 0 ? 0 : 2;
+    std::cout << "distance_validated=" << (distance_validated ? "true" : "false") << "\n";
+    if (distance_validated) {
+        std::cout << "mismatches=" << mismatches << "\n";
+    }
+    std::cout << "output=" << out_path.string() << "\n";
+    return (distance_validated && mismatches > 0) ? 2 : 0;
 }
