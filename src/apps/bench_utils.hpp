@@ -1,6 +1,8 @@
 #pragma once
 
+#include "algorithms/heap_node.hpp"
 #include "algorithms/routing_algorithm.hpp"
+#include "algorithms/stamped_vector.hpp"
 #include "algorithms/stopwatch.hpp"
 #include "io/graph_io.hpp"
 
@@ -235,6 +237,44 @@ inline Json aggregate_to_json(QueryAggregateInput &agg) {
     j["mean_heuristic_evals"] = detail::mean_of(agg.heuristic_evals);
     j["mean_pruned_by_flag"] = detail::mean_of(agg.pruned_by_flag);
     return j;
+}
+
+// Runs Dijkstra from source, settling at most max_settled vertices.
+// Returns (vertex, distance) pairs in settling order; used for generating
+// query pairs at a controlled difficulty without full-graph traversal.
+inline std::vector<std::pair<transport::VertexId, transport::Distance>>
+ranged_dijkstra(const Graph &graph, transport::StampedVector<transport::Distance> &dist, transport::VertexId source,
+                uint32_t max_settled) {
+    using transport::Distance;
+    using transport::HeapNode;
+    using transport::HeapQueue;
+    using transport::kUnreachable;
+    using transport::VertexId;
+
+    dist.reset();
+    HeapQueue pq;
+    dist.set(source, 0);
+    pq.push({0, source});
+
+    std::vector<std::pair<VertexId, Distance>> settled;
+    settled.reserve(max_settled);
+
+    while (!pq.empty() && settled.size() < max_settled) {
+        const HeapNode top = pq.top();
+        pq.pop();
+        if (top.key != dist.get(top.v)) {
+            continue;
+        }
+        settled.push_back({top.v, top.key});
+        for (const auto &e : graph.adjacent_edges(top.v)) {
+            const Distance nd = top.key + e.weight;
+            if (nd < dist.get(e.to)) {
+                dist.set(e.to, nd);
+                pq.push({nd, e.to});
+            }
+        }
+    }
+    return settled;
 }
 
 } // namespace bench

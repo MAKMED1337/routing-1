@@ -118,7 +118,10 @@ Every benchmark run writes a JSON file to `results/`. Rules:
   - `"graph"` — object with `"path"` (binary graph file passed to the benchmark), `"source"` (original input file the graph was built from, e.g. the OSM PBF path), `"vertices"`, `"directed_edges"`.
 - **Timing:** use `_wall_s` / `_cpu_s` pairs for every timed phase so wall vs CPU is always visible.
 - **Memory:** include `"peak_rss_mb"`.
-- **Query stats:** include `"mean_us"`, `"p50_us"`, `"p95_us"`, `"p99_us"`, `"max_us"`, `"count"`, `"seed"` under a `"queries"` object.
+- **Query stats:** use `_wall_us` / `_cpu_us` pairs for latency so wall vs CPU is always visible.
+  Include `"mean_wall_us"`, `"p50_wall_us"`, `"p95_wall_us"`, `"p99_wall_us"`, `"max_wall_us"` and their
+  `_cpu_us` counterparts, plus `"count"` and `"seed"`, under a `"queries"` object.
+  (`ch_measure` uses the older flat `"mean_us"` / `"p50_us"` … schema; new tools use the split form.)
 - Algorithm-specific fields (`"auxiliary_edges"`, `"witness_calls"`, `"ordering_init_wall_s"`, …) are welcome — add as needed.
 - Use a `_note` suffix field to document caveats inline, e.g. `"query_alloc_note": "allocates O(V) vectors per call"`.
 - Keep field names and structure human-readable; a reader skimming the raw JSON should understand each value without consulting code.

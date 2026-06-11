@@ -1,5 +1,3 @@
-#include "algorithms/heap_node.hpp"
-#include "algorithms/stamped_vector.hpp"
 #include "apps/bench_utils.hpp"
 #include "graph/graph.hpp"
 #include "io/graph_io.hpp"
@@ -21,8 +19,6 @@
 namespace fs = std::filesystem;
 using transport::Distance;
 using transport::Graph;
-using transport::HeapNode;
-using transport::HeapQueue;
 using transport::kUnreachable;
 using transport::StampedVector;
 using transport::Stopwatch;
@@ -41,36 +37,6 @@ SelectionMode parse_selection_mode(const std::string &s) {
         return SelectionMode::Random;
     }
     throw std::invalid_argument("unknown selection mode '" + s + "'; expected ranged-dijkstra or random");
-}
-
-// Runs Dijkstra from source, settling at most max_settled vertices.
-// Returns (vertex, distance) pairs in settling order.
-std::vector<std::pair<VertexId, Distance>> ranged_dijkstra(const Graph &graph, StampedVector<Distance> &dist,
-                                                           VertexId source, uint32_t max_settled) {
-    dist.reset();
-    HeapQueue pq;
-    dist.set(source, 0);
-    pq.push({0, source});
-
-    std::vector<std::pair<VertexId, Distance>> settled;
-    settled.reserve(max_settled);
-
-    while (!pq.empty() && settled.size() < max_settled) {
-        const HeapNode top = pq.top();
-        pq.pop();
-        if (top.key != dist.get(top.v)) {
-            continue;
-        }
-        settled.push_back({top.v, top.key});
-        for (const auto &e : graph.adjacent_edges(top.v)) {
-            const Distance nd = top.key + e.weight;
-            if (nd < dist.get(e.to)) {
-                dist.set(e.to, nd);
-                pq.push({nd, e.to});
-            }
-        }
-    }
-    return settled;
 }
 
 } // namespace
@@ -125,8 +91,8 @@ int main(int argc, char **argv) {
         std::cerr << err.what() << "\n";
         return 1;
     }
-    if (mode == SelectionMode::RangedDijkstra && min_settled > max_settled) {
-        std::cerr << "--min-settled must be <= --max-settled\n";
+    if (mode == SelectionMode::RangedDijkstra && (min_settled == 0 || min_settled > max_settled)) {
+        std::cerr << "--min-settled must be >= 1 and <= --max-settled\n";
         return 1;
     }
     if (fs::exists(out_path)) {
@@ -143,6 +109,10 @@ int main(int argc, char **argv) {
     const std::chrono::nanoseconds load_cpu = load_sw.cpu_elapsed();
     if (graph.vertex_count() == 0) {
         std::cerr << "graph must contain at least one vertex\n";
+        return 1;
+    }
+    if (mode == SelectionMode::Random && graph.vertex_count() < 2) {
+        std::cerr << "random selection requires a graph with at least 2 vertices\n";
         return 1;
     }
 
@@ -162,7 +132,7 @@ int main(int argc, char **argv) {
             ++attempted;
             const VertexId source = pick(rng);
 
-            const auto settled = ranged_dijkstra(graph, dist, source, max_settled);
+            const auto settled = bench::ranged_dijkstra(graph, dist, source, max_settled);
             if (settled.size() < min_settled) {
                 continue;
             }
