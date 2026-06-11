@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cassert>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <ctime>
 #include <functional>
@@ -156,6 +157,84 @@ inline void run_benchmark(const BenchmarkArgs &args, const LoadedGraph &loaded, 
     };
 
     out << j.dump(2) << "\n";
+}
+
+// --- query aggregate helpers (shared by benchmark_main and bench_replay_main) ---
+
+struct QueryAggregateInput {
+    std::vector<std::chrono::nanoseconds> query_wall;
+    std::vector<std::chrono::nanoseconds> query_cpu;
+    std::vector<uint32_t> settled;
+    std::vector<uint64_t> relaxed_arcs;
+    std::vector<uint64_t> heap_pushes;
+    std::vector<uint64_t> heuristic_evals;
+    std::vector<uint64_t> pruned_by_flag;
+};
+
+namespace detail {
+
+template <typename T> inline double mean_of(const std::vector<T> &v) {
+    if (v.empty()) {
+        return 0.0;
+    }
+    return static_cast<double>(std::accumulate(v.begin(), v.end(), T{0})) / static_cast<double>(v.size());
+}
+
+template <typename T> inline double percentile_of(std::vector<T> v, double pct) {
+    if (v.empty()) {
+        return 0.0;
+    }
+    std::sort(v.begin(), v.end());
+    const size_t idx = std::min(static_cast<size_t>(static_cast<double>(v.size()) * pct / 100.0), v.size() - 1);
+    return static_cast<double>(v[idx]);
+}
+
+inline double mean_ns_as_us(const std::vector<std::chrono::nanoseconds> &v) {
+    if (v.empty()) {
+        return 0.0;
+    }
+    const std::chrono::nanoseconds total = std::accumulate(v.begin(), v.end(), std::chrono::nanoseconds{0});
+    return to_microseconds(total) / static_cast<double>(v.size());
+}
+
+inline double percentile_ns_as_us(std::vector<std::chrono::nanoseconds> v, double pct) {
+    if (v.empty()) {
+        return 0.0;
+    }
+    std::sort(v.begin(), v.end());
+    const size_t idx = std::min(static_cast<size_t>(static_cast<double>(v.size()) * pct / 100.0), v.size() - 1);
+    return to_microseconds(v[idx]);
+}
+
+inline double max_ns_as_us(const std::vector<std::chrono::nanoseconds> &v) {
+    if (v.empty()) {
+        return 0.0;
+    }
+    return to_microseconds(*std::max_element(v.begin(), v.end()));
+}
+
+} // namespace detail
+
+inline Json aggregate_to_json(QueryAggregateInput &agg) {
+    Json j;
+    j["mean_wall_us"] = detail::mean_ns_as_us(agg.query_wall);
+    j["p50_wall_us"] = detail::percentile_ns_as_us(agg.query_wall, 50.0);
+    j["p95_wall_us"] = detail::percentile_ns_as_us(agg.query_wall, 95.0);
+    j["p99_wall_us"] = detail::percentile_ns_as_us(agg.query_wall, 99.0);
+    j["max_wall_us"] = detail::max_ns_as_us(agg.query_wall);
+    j["mean_cpu_us"] = detail::mean_ns_as_us(agg.query_cpu);
+    j["p50_cpu_us"] = detail::percentile_ns_as_us(agg.query_cpu, 50.0);
+    j["p95_cpu_us"] = detail::percentile_ns_as_us(agg.query_cpu, 95.0);
+    j["p99_cpu_us"] = detail::percentile_ns_as_us(agg.query_cpu, 99.0);
+    j["max_cpu_us"] = detail::max_ns_as_us(agg.query_cpu);
+    j["mean_settled"] = detail::mean_of(agg.settled);
+    j["p50_settled"] = detail::percentile_of(agg.settled, 50.0);
+    j["p95_settled"] = detail::percentile_of(agg.settled, 95.0);
+    j["mean_relaxed_arcs"] = detail::mean_of(agg.relaxed_arcs);
+    j["mean_heap_pushes"] = detail::mean_of(agg.heap_pushes);
+    j["mean_heuristic_evals"] = detail::mean_of(agg.heuristic_evals);
+    j["mean_pruned_by_flag"] = detail::mean_of(agg.pruned_by_flag);
+    return j;
 }
 
 } // namespace bench
