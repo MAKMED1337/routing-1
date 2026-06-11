@@ -86,11 +86,15 @@ struct AlgorithmParameters {
 
 const std::map<std::string, AlgorithmParameters> &algorithm_registry() {
     static const std::map<std::string, AlgorithmParameters> reg = {
-        {"dijkstra", {false, false, false, false, false}},  {"astar", {true, false, false, false, false}},
-        {"alt", {false, false, false, true, false}},        {"bidijkstra", {false, false, false, false, false}},
-        {"bidi_astar", {true, false, false, false, false}}, {"ch", {false, true, false, false, false}},
-        {"arcflags", {true, true, true, false, false}},     {"chase", {true, true, false, false, false}},
-        {"hl", {false, true, false, false, true}},
+        {"dijkstra",   {}},
+        {"astar",      {.needs_coords = true}},
+        {"alt",        {.uses_landmarks = true}},
+        {"bidijkstra", {}},
+        {"bidi_astar", {.needs_coords = true}},
+        {"ch",         {.uses_ch_artifact = true}},
+        {"arcflags",   {.needs_coords = true, .uses_ch_artifact = true, .uses_arcflags = true}},
+        {"chase",      {.needs_coords = true, .uses_ch_artifact = true}},
+        {"hl",         {.uses_ch_artifact = true, .uses_hl = true}},
     };
     return reg;
 }
