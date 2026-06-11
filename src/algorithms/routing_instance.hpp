@@ -53,22 +53,30 @@ struct RoutingInstance {
     PreprocessReport stats;
 };
 
+struct InjectedArcFlags {
+    std::optional<std::filesystem::path> load_path;
+    std::optional<std::filesystem::path> save_path;
+    std::optional<uint16_t> regions;
+    std::optional<PartitionMethod> partition;
+    std::optional<uint32_t> threads;
+};
+
+struct InjectedLandmarks {
+    std::optional<alt::LandmarkStrategy> strategy;
+    std::optional<uint32_t> count;
+    std::optional<uint32_t> active;
+};
+
 struct RoutingPreprocessingContext {
     std::optional<std::filesystem::path> ch_load_path;
     std::optional<std::filesystem::path> ch_save_path;
-    std::optional<std::filesystem::path> arcflags_load_path;
-    std::optional<std::filesystem::path> arcflags_save_path;
     // HL-specific overrides; if unset, HubLabelsAlgorithm defaults are used.
     std::optional<double> hl_label_fraction;
-    std::optional<double> hl_memory_budget_gb;
-    // Arc Flags tunables; if unset, routing_instance.cpp defaults are used.
-    std::optional<uint16_t> arcflags_regions;
-    std::optional<PartitionMethod> arcflags_partition;
-    std::optional<uint32_t> arcflags_threads;
-    // ALT tunables; if unset, routing_instance.cpp defaults are used.
-    std::optional<alt::LandmarkStrategy> alt_landmark_strategy;
-    std::optional<uint32_t> alt_landmark_count;
-    std::optional<uint32_t> alt_active_landmarks;
+    std::optional<double> memory_budget_gb;
+    // Arc Flags tunables; if set, validates that algorithm is "arcflags".
+    std::optional<InjectedArcFlags> arcflags;
+    // ALT tunables; if set, validates that algorithm is "alt".
+    std::optional<InjectedLandmarks> landmarks;
 };
 
 // Validates `name`/`coords`, builds any CH/PHAST dependency the algorithm needs, constructs the

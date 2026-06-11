@@ -22,6 +22,7 @@
 namespace fs = std::filesystem;
 using transport::ContractionHierarchyAlgorithm;
 using transport::Graph;
+using transport::InjectedArcFlags;
 using transport::PathResult;
 using transport::PreprocessReport;
 using transport::RoutingAlgorithm;
@@ -89,6 +90,8 @@ int main(int argc, char **argv) {
     uint32_t seed = 1;
     transport::RoutingPreprocessingContext context_a;
     transport::RoutingPreprocessingContext context_b;
+    InjectedArcFlags arcflags_a;
+    InjectedArcFlags arcflags_b;
 
     CLI::App app{"Compare two routing algorithms on sampled graph queries"};
     app.add_option("--graph", graph_path, "Path to graph binary")->required()->check(CLI::ExistingFile);
@@ -106,24 +109,27 @@ int main(int argc, char **argv) {
     app.add_option("--algorithm-a-ch-load", context_a.ch_load_path, "Load CH artifact for algorithm A")
         ->check(CLI::ExistingFile);
     app.add_option("--algorithm-a-ch-save", context_a.ch_save_path, "Save CH artifact for algorithm A");
-    app.add_option("--algorithm-a-arcflags-load", context_a.arcflags_load_path,
-                   "Load ArcFlags artifact for algorithm A")
+    app.add_option("--algorithm-a-arcflags-load", arcflags_a.load_path, "Load ArcFlags artifact for algorithm A")
         ->check(CLI::ExistingFile);
-    app.add_option("--algorithm-a-arcflags-save", context_a.arcflags_save_path,
-                   "Save ArcFlags artifact for algorithm A");
+    app.add_option("--algorithm-a-arcflags-save", arcflags_a.save_path, "Save ArcFlags artifact for algorithm A");
     app.add_option("--algorithm-b-ch-load", context_b.ch_load_path, "Load CH artifact for algorithm B")
         ->check(CLI::ExistingFile);
     app.add_option("--algorithm-b-ch-save", context_b.ch_save_path, "Save CH artifact for algorithm B");
-    app.add_option("--algorithm-b-arcflags-load", context_b.arcflags_load_path,
-                   "Load ArcFlags artifact for algorithm B")
+    app.add_option("--algorithm-b-arcflags-load", arcflags_b.load_path, "Load ArcFlags artifact for algorithm B")
         ->check(CLI::ExistingFile);
-    app.add_option("--algorithm-b-arcflags-save", context_b.arcflags_save_path,
-                   "Save ArcFlags artifact for algorithm B");
+    app.add_option("--algorithm-b-arcflags-save", arcflags_b.save_path, "Save ArcFlags artifact for algorithm B");
 
     try {
         app.parse(argc, argv);
     } catch (const CLI::ParseError &err) {
         return app.exit(err);
+    }
+
+    if (arcflags_a.load_path || arcflags_a.save_path) {
+        context_a.arcflags = std::move(arcflags_a);
+    }
+    if (arcflags_b.load_path || arcflags_b.save_path) {
+        context_b.arcflags = std::move(arcflags_b);
     }
 
     if (queries == 0) {
@@ -134,9 +140,10 @@ int main(int argc, char **argv) {
         std::cerr << "--min-settled must be <= --max-settled\n";
         return 1;
     }
+    const auto af_save_a = context_a.arcflags ? context_a.arcflags->save_path : std::nullopt;
+    const auto af_save_b = context_b.arcflags ? context_b.arcflags->save_path : std::nullopt;
     std::set<std::string> artifact_save_paths;
-    for (const auto &path :
-         {context_a.ch_save_path, context_a.arcflags_save_path, context_b.ch_save_path, context_b.arcflags_save_path}) {
+    for (const auto &path : {context_a.ch_save_path, af_save_a, context_b.ch_save_path, af_save_b}) {
         if (path && fs::exists(*path)) {
             std::cerr << "artifact output file already exists: " << *path << "\n";
             return 1;

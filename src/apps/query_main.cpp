@@ -17,6 +17,7 @@ int main(int argc, char **argv) {
     transport::VertexId target = 0;
     std::string algo = "dijkstra";
     transport::RoutingPreprocessingContext preprocessing_context;
+    transport::InjectedArcFlags arcflags_opts;
 
     CLI::App app{"Run a shortest-path query against a binary graph"};
     app.add_option("--graph", graph_path, "Path to graph binary")->required()->check(CLI::ExistingFile);
@@ -27,9 +28,9 @@ int main(int argc, char **argv) {
     app.add_option("--ch-load", preprocessing_context.ch_load_path, "Load a precomputed CH artifact")
         ->check(CLI::ExistingFile);
     app.add_option("--ch-save", preprocessing_context.ch_save_path, "Save a computed CH artifact");
-    app.add_option("--arcflags-load", preprocessing_context.arcflags_load_path, "Load a precomputed ArcFlags artifact")
+    app.add_option("--arcflags-load", arcflags_opts.load_path, "Load a precomputed ArcFlags artifact")
         ->check(CLI::ExistingFile);
-    app.add_option("--arcflags-save", preprocessing_context.arcflags_save_path, "Save a computed ArcFlags artifact");
+    app.add_option("--arcflags-save", arcflags_opts.save_path, "Save a computed ArcFlags artifact");
 
     try {
         app.parse(argc, argv);
@@ -37,12 +38,18 @@ int main(int argc, char **argv) {
         return app.exit(err);
     }
 
+    if (arcflags_opts.load_path || arcflags_opts.save_path) {
+        preprocessing_context.arcflags = std::move(arcflags_opts);
+    }
+
     const transport::Graph graph = transport::load_graph_binary(graph_path);
     if (source >= graph.vertex_count() || target >= graph.vertex_count()) {
         std::cerr << "source/target out of range\n";
         return 1;
     }
-    for (const auto &path : {preprocessing_context.ch_save_path, preprocessing_context.arcflags_save_path}) {
+    const auto arcflags_save =
+        preprocessing_context.arcflags ? preprocessing_context.arcflags->save_path : std::nullopt;
+    for (const auto &path : {preprocessing_context.ch_save_path, arcflags_save}) {
         if (path && std::filesystem::exists(*path)) {
             std::cerr << "artifact output file already exists: " << *path << "\n";
             return 1;

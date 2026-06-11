@@ -1,14 +1,9 @@
 #include "algorithms/alt/alt.hpp"
 
-#include "graph/reverse_graph.hpp"
-
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <random>
-#include <stdexcept>
 #include <string_view>
-#include <utility>
 #include <vector>
 
 namespace transport {
@@ -43,39 +38,15 @@ Distance compute_potential(const alt::LandmarkSet &landmarks, const std::vector<
     return best;
 }
 
-alt::LandmarkSet build_configured_landmarks(const Graph &graph, alt::LandmarkStrategy strategy, uint32_t landmark_count,
-                                            std::span<const NodeCoord> coords) {
-    std::mt19937 rng{42};
-    const Graph reverse = build_reverse_graph(graph);
-    return alt::build_landmarks(graph, reverse, landmark_count, strategy, rng, coords);
-}
-
 } // namespace
 
-AltAlgorithm::AltAlgorithm(const Graph &graph) : AltAlgorithm(graph, alt::LandmarkStrategy::Farthest, 16, 4) {}
-
-AltAlgorithm::AltAlgorithm(const Graph &graph, alt::LandmarkStrategy landmark_strategy, uint32_t landmark_count,
-                           uint32_t active_landmarks, std::span<const NodeCoord> coords)
-    : graph_(graph), active_landmarks_(active_landmarks), landmark_strategy_(landmark_strategy),
-      landmark_count_(landmark_count), landmark_coords_(coords.begin(), coords.end()), landmarks_{},
-      preprocessed_(false),
-      astar_(graph, [this](VertexId vertex, VertexId target) { return potential(vertex, target); }) {}
-
 AltAlgorithm::AltAlgorithm(const Graph &graph, alt::LandmarkSet landmarks, uint32_t active_landmarks)
-    : graph_(graph), active_landmarks_(active_landmarks), landmark_strategy_(alt::LandmarkStrategy::Farthest),
-      landmark_count_(static_cast<uint32_t>(landmarks.landmarks.size())), landmarks_(std::move(landmarks)),
-      preprocessed_(true),
+    : graph_(graph), active_landmarks_(active_landmarks), landmarks_(std::move(landmarks)),
       astar_(graph, [this](VertexId vertex, VertexId target) { return potential(vertex, target); }) {}
 
 std::string_view AltAlgorithm::name() const { return "alt"; }
 
-void AltAlgorithm::preprocess() {
-    if (preprocessed_) {
-        return;
-    }
-    landmarks_ = build_configured_landmarks(graph_, landmark_strategy_, landmark_count_, landmark_coords_);
-    preprocessed_ = true;
-}
+void AltAlgorithm::preprocess() {}
 
 uint64_t AltAlgorithm::landmark_table_bytes() const {
     return static_cast<uint64_t>((landmarks_.dist_from.size() + landmarks_.dist_to.size()) * sizeof(Distance));
@@ -104,9 +75,6 @@ void AltAlgorithm::select_active(VertexId source, VertexId target) const {
 }
 
 PathResult AltAlgorithm::query(VertexId source, VertexId target) const {
-    if (!preprocessed_) {
-        throw std::logic_error("AltAlgorithm::query called before preprocess()");
-    }
     select_active(source, target);
     return astar_.query(source, target);
 }
