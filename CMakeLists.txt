@@ -136,6 +136,12 @@ target_link_libraries(bench_harness INTERFACE transport_core nlohmann_json::nloh
 add_executable(ch_measure src/apps/ch_measure_main.cpp)
 target_link_libraries(ch_measure PRIVATE bench_harness CLI11::CLI11)
 
+add_executable(transport_query_gen src/apps/query_gen_main.cpp)
+target_link_libraries(transport_query_gen PRIVATE bench_harness CLI11::CLI11)
+
+add_executable(transport_bench_replay src/apps/bench_replay_main.cpp)
+target_link_libraries(transport_bench_replay PRIVATE bench_harness CLI11::CLI11)
+
 if(BUILD_TESTING)
   add_test(NAME graph_io COMMAND graph_io_tests)
   add_test(NAME reverse_graph COMMAND reverse_graph_tests)
@@ -144,6 +150,8 @@ if(BUILD_TESTING)
   add_test(NAME benchmark_help COMMAND transport_benchmark --help)
   add_test(NAME write_benchmark_graph_help COMMAND write_benchmark_graph --help)
   add_test(NAME ch_measure_help COMMAND ch_measure --help)
+  add_test(NAME query_gen_help COMMAND transport_query_gen --help)
+  add_test(NAME bench_replay_help COMMAND transport_bench_replay --help)
   add_test(NAME routing_algorithms COMMAND transport_routing_tests)
   add_test(NAME routing_instance COMMAND routing_instance_tests)
   add_test(NAME alt COMMAND alt_tests)

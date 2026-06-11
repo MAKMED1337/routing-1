@@ -1,12 +1,15 @@
 #pragma once
 
+#include "algorithms/heap_node.hpp"
 #include "algorithms/routing_algorithm.hpp"
+#include "algorithms/stamped_vector.hpp"
 #include "algorithms/stopwatch.hpp"
 #include "io/graph_io.hpp"
 
 #include <algorithm>
 #include <cassert>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <ctime>
 #include <functional>
@@ -156,6 +159,122 @@ inline void run_benchmark(const BenchmarkArgs &args, const LoadedGraph &loaded, 
     };
 
     out << j.dump(2) << "\n";
+}
+
+// --- query aggregate helpers (shared by benchmark_main and bench_replay_main) ---
+
+struct QueryAggregateInput {
+    std::vector<std::chrono::nanoseconds> query_wall;
+    std::vector<std::chrono::nanoseconds> query_cpu;
+    std::vector<uint32_t> settled;
+    std::vector<uint64_t> relaxed_arcs;
+    std::vector<uint64_t> heap_pushes;
+    std::vector<uint64_t> heuristic_evals;
+    std::vector<uint64_t> pruned_by_flag;
+};
+
+namespace detail {
+
+template <typename T> inline double mean_of(const std::vector<T> &v) {
+    if (v.empty()) {
+        return 0.0;
+    }
+    return static_cast<double>(std::accumulate(v.begin(), v.end(), T{0})) / static_cast<double>(v.size());
+}
+
+template <typename T> inline double percentile_of(std::vector<T> v, double pct) {
+    if (v.empty()) {
+        return 0.0;
+    }
+    std::sort(v.begin(), v.end());
+    const size_t idx = std::min(static_cast<size_t>(static_cast<double>(v.size()) * pct / 100.0), v.size() - 1);
+    return static_cast<double>(v[idx]);
+}
+
+inline double mean_ns_as_us(const std::vector<std::chrono::nanoseconds> &v) {
+    if (v.empty()) {
+        return 0.0;
+    }
+    const std::chrono::nanoseconds total = std::accumulate(v.begin(), v.end(), std::chrono::nanoseconds{0});
+    return to_microseconds(total) / static_cast<double>(v.size());
+}
+
+inline double percentile_ns_as_us(std::vector<std::chrono::nanoseconds> v, double pct) {
+    if (v.empty()) {
+        return 0.0;
+    }
+    std::sort(v.begin(), v.end());
+    const size_t idx = std::min(static_cast<size_t>(static_cast<double>(v.size()) * pct / 100.0), v.size() - 1);
+    return to_microseconds(v[idx]);
+}
+
+inline double max_ns_as_us(const std::vector<std::chrono::nanoseconds> &v) {
+    if (v.empty()) {
+        return 0.0;
+    }
+    return to_microseconds(*std::max_element(v.begin(), v.end()));
+}
+
+} // namespace detail
+
+inline Json aggregate_to_json(QueryAggregateInput &agg) {
+    Json j;
+    j["mean_wall_us"] = detail::mean_ns_as_us(agg.query_wall);
+    j["p50_wall_us"] = detail::percentile_ns_as_us(agg.query_wall, 50.0);
+    j["p95_wall_us"] = detail::percentile_ns_as_us(agg.query_wall, 95.0);
+    j["p99_wall_us"] = detail::percentile_ns_as_us(agg.query_wall, 99.0);
+    j["max_wall_us"] = detail::max_ns_as_us(agg.query_wall);
+    j["mean_cpu_us"] = detail::mean_ns_as_us(agg.query_cpu);
+    j["p50_cpu_us"] = detail::percentile_ns_as_us(agg.query_cpu, 50.0);
+    j["p95_cpu_us"] = detail::percentile_ns_as_us(agg.query_cpu, 95.0);
+    j["p99_cpu_us"] = detail::percentile_ns_as_us(agg.query_cpu, 99.0);
+    j["max_cpu_us"] = detail::max_ns_as_us(agg.query_cpu);
+    j["mean_settled"] = detail::mean_of(agg.settled);
+    j["p50_settled"] = detail::percentile_of(agg.settled, 50.0);
+    j["p95_settled"] = detail::percentile_of(agg.settled, 95.0);
+    j["mean_relaxed_arcs"] = detail::mean_of(agg.relaxed_arcs);
+    j["mean_heap_pushes"] = detail::mean_of(agg.heap_pushes);
+    j["mean_heuristic_evals"] = detail::mean_of(agg.heuristic_evals);
+    j["mean_pruned_by_flag"] = detail::mean_of(agg.pruned_by_flag);
+    return j;
+}
+
+// Runs Dijkstra from source, settling at most max_settled vertices.
+// Returns (vertex, distance) pairs in settling order; used for generating
+// query pairs at a controlled difficulty without full-graph traversal.
+inline std::vector<std::pair<transport::VertexId, transport::Distance>>
+ranged_dijkstra(const Graph &graph, transport::StampedVector<transport::Distance> &dist, transport::VertexId source,
+                uint32_t max_settled) {
+    using transport::Distance;
+    using transport::HeapNode;
+    using transport::HeapQueue;
+    using transport::kUnreachable;
+    using transport::VertexId;
+
+    dist.reset();
+    HeapQueue pq;
+    dist.set(source, 0);
+    pq.push({0, source});
+
+    std::vector<std::pair<VertexId, Distance>> settled;
+    settled.reserve(max_settled);
+
+    while (!pq.empty() && settled.size() < max_settled) {
+        const HeapNode top = pq.top();
+        pq.pop();
+        if (top.key != dist.get(top.v)) {
+            continue;
+        }
+        settled.push_back({top.v, top.key});
+        for (const auto &e : graph.adjacent_edges(top.v)) {
+            const Distance nd = top.key + e.weight;
+            if (nd < dist.get(e.to)) {
+                dist.set(e.to, nd);
+                pq.push({nd, e.to});
+            }
+        }
+    }
+    return settled;
 }
 
 } // namespace bench
