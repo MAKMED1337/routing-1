@@ -1,11 +1,13 @@
 #pragma once
 
 #include "algorithms/ch/contraction_hierarchy.hpp"
+#include "algorithms/partition.hpp"
 #include "algorithms/routing_algorithm.hpp"
 #include "graph/geometry.hpp"
 #include "graph/graph.hpp"
 
 #include <chrono>
+#include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -55,6 +57,13 @@ struct RoutingPreprocessingContext {
     std::optional<std::filesystem::path> ch_save_path;
     std::optional<std::filesystem::path> arcflags_load_path;
     std::optional<std::filesystem::path> arcflags_save_path;
+    // HL-specific overrides; if unset, HubLabelsAlgorithm defaults are used.
+    std::optional<double> hl_label_fraction;
+    std::optional<double> hl_memory_budget_gb;
+    // Arc Flags tunables; if unset, routing_instance.cpp defaults are used.
+    std::optional<uint16_t> arcflags_regions;
+    std::optional<PartitionMethod> arcflags_partition;
+    std::optional<uint32_t> arcflags_threads;
 };
 
 // Validates `name`/`coords`, builds any CH/PHAST dependency the algorithm needs, constructs the

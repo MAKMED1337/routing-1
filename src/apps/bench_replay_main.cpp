@@ -1,4 +1,5 @@
 #include "algorithms/ch/contraction_hierarchy.hpp"
+#include "algorithms/partition.hpp"
 #include "algorithms/routing_instance.hpp"
 #include "apps/bench_utils.hpp"
 #include "io/graph_io.hpp"
@@ -143,11 +144,34 @@ int main(int argc, char **argv) {
     app.add_option("--arcflags-load", context.arcflags_load_path, "Load ArcFlags artifact from this path")
         ->check(CLI::ExistingFile);
     app.add_option("--arcflags-save", context.arcflags_save_path, "Save ArcFlags artifact to this path");
+    app.add_option("--hl-label-fraction", context.hl_label_fraction,
+                   "Hub Labels: fraction of top-ranked CH vertices to label (0 < f <= 1; default 0.25)")
+        ->check(CLI::Range(0.0, 1.0));
+    app.add_option("--hl-memory-budget-gb", context.hl_memory_budget_gb,
+                   "Hub Labels: memory budget in GiB before throwing (default 18)")
+        ->check(CLI::PositiveNumber);
+    std::string arcflags_partition_str;
+    app.add_option("--arcflags-regions", context.arcflags_regions, "Arc Flags: number of regions [1,64] (default 32)")
+        ->check(CLI::Range(1u, 64u));
+    app.add_option("--arcflags-partition", arcflags_partition_str,
+                   "Arc Flags: partition method: grid|inertial|kaminpar (default inertial)")
+        ->check(CLI::IsMember({"grid", "inertial", "kaminpar"}));
+    app.add_option("--arcflags-threads", context.arcflags_threads, "Arc Flags: preprocessing thread count (default 1)")
+        ->check(CLI::PositiveNumber);
 
     try {
         app.parse(argc, argv);
     } catch (const CLI::ParseError &err) {
         return app.exit(err);
+    }
+
+    if (!arcflags_partition_str.empty()) {
+        try {
+            context.arcflags_partition = transport::parse_partition_method(arcflags_partition_str);
+        } catch (const std::exception &err) {
+            std::cerr << err.what() << "\n";
+            return 1;
+        }
     }
 
     for (const auto &save_path : {context.ch_save_path, context.arcflags_save_path}) {

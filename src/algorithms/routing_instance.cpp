@@ -55,6 +55,21 @@ void validate_context(const std::string &name, const RoutingPreprocessingContext
     if (context.arcflags_load_path && context.arcflags_save_path) {
         throw std::invalid_argument("cannot use both arcflags load and save paths");
     }
+    if ((context.hl_label_fraction || context.hl_memory_budget_gb) && name != "hl") {
+        throw std::invalid_argument("HL options are unsupported for algorithm '" + name + "'");
+    }
+    if (context.hl_label_fraction && (*context.hl_label_fraction <= 0.0 || *context.hl_label_fraction > 1.0)) {
+        throw std::invalid_argument("hl_label_fraction must be in (0, 1]");
+    }
+    if (context.hl_memory_budget_gb && *context.hl_memory_budget_gb <= 0.0) {
+        throw std::invalid_argument("hl_memory_budget_gb must be positive");
+    }
+    if ((context.arcflags_regions || context.arcflags_partition || context.arcflags_threads) && name != "arcflags") {
+        throw std::invalid_argument("Arc Flags options are unsupported for algorithm '" + name + "'");
+    }
+    if (context.arcflags_threads && *context.arcflags_threads == 0) {
+        throw std::invalid_argument("arcflags_threads must be >= 1");
+    }
 }
 
 ContractionHierarchyBuildResult build_or_load_ch(const Graph &graph, const RoutingPreprocessingContext &context,
@@ -122,10 +137,12 @@ std::unique_ptr<RoutingAlgorithm> build_algorithm(const std::string &name, const
             report.arcflags_loaded_from = context.arcflags_load_path->string();
             return std::make_unique<ArcFlagsAlgorithm>(graph, std::move(data));
         }
+        const uint16_t regions = context.arcflags_regions.value_or(uint16_t{32});
+        const PartitionMethod partition = context.arcflags_partition.value_or(PartitionMethod::Inertial);
+        const uint32_t threads = context.arcflags_threads.value_or(uint32_t{1});
         ContractionHierarchyBuildResult built = build_or_load_ch(graph, context, dependency_stats, report);
         PhastAlgorithm phast(built.hierarchy);
-        return std::make_unique<ArcFlagsAlgorithm>(graph, std::move(phast), uint16_t{32}, PartitionMethod::Inertial,
-                                                   uint32_t{1}, coords);
+        return std::make_unique<ArcFlagsAlgorithm>(graph, std::move(phast), regions, partition, threads, coords);
     }
     if (name == "chase") {
         ContractionHierarchyBuildResult built = build_or_load_ch(graph, context, dependency_stats, report);
@@ -134,7 +151,11 @@ std::unique_ptr<RoutingAlgorithm> build_algorithm(const std::string &name, const
     }
     if (name == "hl") {
         ContractionHierarchyBuildResult built = build_or_load_ch(graph, context, dependency_stats, report);
-        return std::make_unique<HubLabelsAlgorithm>(graph, std::move(built.hierarchy));
+        const double label_fraction = context.hl_label_fraction.value_or(0.25);
+        const uint64_t memory_budget =
+            context.hl_memory_budget_gb ? static_cast<uint64_t>(*context.hl_memory_budget_gb * 1024.0 * 1024.0 * 1024.0)
+                                        : 18ULL * 1024 * 1024 * 1024;
+        return std::make_unique<HubLabelsAlgorithm>(graph, std::move(built.hierarchy), label_fraction, memory_budget);
     }
     throw std::invalid_argument("unsupported algorithm: " + name);
 }
