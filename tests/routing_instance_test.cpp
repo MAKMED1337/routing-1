@@ -47,7 +47,8 @@ bool check_partition_dependent_algorithms_work_with_coords() {
 
 bool check_graph_only_algorithms_need_no_coords() {
     const transport::Graph graph = transport::test::make_line_graph();
-    for (const std::string &algo : {std::string("dijkstra"), std::string("bidijkstra"), std::string("ch")}) {
+    for (const std::string &algo :
+         {std::string("dijkstra"), std::string("bidijkstra"), std::string("ch"), std::string("alt")}) {
         transport::RoutingInstance instance = transport::make_routing_instance(algo, graph);
         if (!check_all_pairs(graph, *instance.algorithm, algo)) {
             return false;
@@ -60,6 +61,57 @@ bool check_unsupported_algorithm_throws() {
     const transport::Graph graph = transport::test::make_line_graph();
     return expect_throws([&] { (void)transport::make_routing_instance("not-an-algorithm", graph); },
                          "factory: expected unsupported algorithm name to throw");
+}
+
+bool check_alt_landmark_context() {
+    const auto [graph, coords] = transport::test::make_grid_graph(3, 3);
+    for (const transport::alt::LandmarkStrategy strategy :
+         {transport::alt::LandmarkStrategy::Random, transport::alt::LandmarkStrategy::Farthest,
+          transport::alt::LandmarkStrategy::Planar}) {
+        transport::RoutingPreprocessingContext context;
+        context.alt_landmark_strategy = strategy;
+        context.alt_landmark_count = 4;
+        context.alt_active_landmarks = 2;
+        transport::RoutingInstance instance = transport::make_routing_instance("alt", graph, coords, context);
+        if (!check_all_pairs(graph, *instance.algorithm, "alt configured landmarks")) {
+            return false;
+        }
+    }
+
+    transport::RoutingPreprocessingContext zero_count;
+    zero_count.alt_landmark_count = 0;
+    if (!expect_throws([&] { (void)transport::make_routing_instance("alt", graph, coords, zero_count); },
+                       "factory: expected ALT zero landmark count to throw")) {
+        return false;
+    }
+
+    transport::RoutingPreprocessingContext zero_active;
+    zero_active.alt_active_landmarks = 0;
+    if (!expect_throws([&] { (void)transport::make_routing_instance("alt", graph, coords, zero_active); },
+                       "factory: expected ALT zero active landmarks to throw")) {
+        return false;
+    }
+
+    transport::RoutingPreprocessingContext too_many_active;
+    too_many_active.alt_landmark_count = 2;
+    too_many_active.alt_active_landmarks = 3;
+    if (!expect_throws([&] { (void)transport::make_routing_instance("alt", graph, coords, too_many_active); },
+                       "factory: expected ALT active landmarks > total to throw")) {
+        return false;
+    }
+
+    transport::RoutingPreprocessingContext planar_without_coords;
+    planar_without_coords.alt_landmark_strategy = transport::alt::LandmarkStrategy::Planar;
+    if (!expect_throws([&] { (void)transport::make_routing_instance("alt", graph, {}, planar_without_coords); },
+                       "factory: expected planar ALT without coordinates to throw")) {
+        return false;
+    }
+
+    transport::RoutingPreprocessingContext alt_option_on_dijkstra;
+    alt_option_on_dijkstra.alt_landmark_count = 4;
+    return expect_throws(
+        [&] { (void)transport::make_routing_instance("dijkstra", graph, coords, alt_option_on_dijkstra); },
+        "factory: expected ALT options on Dijkstra to throw");
 }
 
 bool check_dependency_preprocessing_runs_for_ch_dependent_algorithms() {
@@ -134,6 +186,7 @@ int main() {
     ok &= check_partition_dependent_algorithms_work_with_coords();
     ok &= check_graph_only_algorithms_need_no_coords();
     ok &= check_unsupported_algorithm_throws();
+    ok &= check_alt_landmark_context();
     ok &= check_dependency_preprocessing_runs_for_ch_dependent_algorithms();
     ok &= check_ch_artifact_context_round_trip();
     ok &= check_arcflags_artifact_context_round_trip();

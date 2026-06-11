@@ -1,5 +1,6 @@
 #pragma once
 
+#include "algorithms/alt/landmarks.hpp"
 #include "algorithms/ch/contraction_hierarchy.hpp"
 #include "algorithms/partition.hpp"
 #include "algorithms/routing_algorithm.hpp"
@@ -64,6 +65,10 @@ struct RoutingPreprocessingContext {
     std::optional<uint16_t> arcflags_regions;
     std::optional<PartitionMethod> arcflags_partition;
     std::optional<uint32_t> arcflags_threads;
+    // ALT tunables; if unset, routing_instance.cpp defaults are used.
+    std::optional<alt::LandmarkStrategy> alt_landmark_strategy;
+    std::optional<uint32_t> alt_landmark_count;
+    std::optional<uint32_t> alt_active_landmarks;
 };
 
 // Validates `name`/`coords`, builds any CH/PHAST dependency the algorithm needs, constructs the

@@ -70,6 +70,21 @@ void validate_context(const std::string &name, const RoutingPreprocessingContext
     if (context.arcflags_threads && *context.arcflags_threads == 0) {
         throw std::invalid_argument("arcflags_threads must be >= 1");
     }
+    if ((context.alt_landmark_strategy || context.alt_landmark_count || context.alt_active_landmarks) &&
+        name != "alt") {
+        throw std::invalid_argument("ALT options are unsupported for algorithm '" + name + "'");
+    }
+    if (context.alt_landmark_count && *context.alt_landmark_count == 0) {
+        throw std::invalid_argument("alt_landmark_count must be >= 1");
+    }
+    if (context.alt_active_landmarks && *context.alt_active_landmarks == 0) {
+        throw std::invalid_argument("alt_active_landmarks must be >= 1");
+    }
+    const uint32_t landmark_count = context.alt_landmark_count.value_or(uint32_t{16});
+    const uint32_t active_landmarks = context.alt_active_landmarks.value_or(uint32_t{4});
+    if (active_landmarks > landmark_count) {
+        throw std::invalid_argument("alt_active_landmarks must be <= alt_landmark_count");
+    }
 }
 
 ContractionHierarchyBuildResult build_or_load_ch(const Graph &graph, const RoutingPreprocessingContext &context,
@@ -115,7 +130,10 @@ std::unique_ptr<RoutingAlgorithm> build_algorithm(const std::string &name, const
         return std::make_unique<AStarAlgorithm>(graph, make_haversine_heuristic(coords));
     }
     if (name == "alt") {
-        return std::make_unique<AltAlgorithm>(graph);
+        const alt::LandmarkStrategy strategy = context.alt_landmark_strategy.value_or(alt::LandmarkStrategy::Farthest);
+        const uint32_t landmark_count = context.alt_landmark_count.value_or(uint32_t{16});
+        const uint32_t active_landmarks = context.alt_active_landmarks.value_or(uint32_t{4});
+        return std::make_unique<AltAlgorithm>(graph, strategy, landmark_count, active_landmarks, coords);
     }
     if (name == "bidijkstra") {
         return std::make_unique<BidirectionalDijkstraAlgorithm>(graph);
@@ -173,7 +191,9 @@ RoutingInstance make_routing_instance(const std::string &name, const Graph &grap
     }
     validate_context(name, context);
     const bool coords_are_satisfied_by_artifact = name == "arcflags" && context.arcflags_load_path.has_value();
-    if (requires_coords(name) && !coords_are_satisfied_by_artifact) {
+    const bool alt_planar_requires_coords =
+        name == "alt" && context.alt_landmark_strategy == alt::LandmarkStrategy::Planar;
+    if ((requires_coords(name) || alt_planar_requires_coords) && !coords_are_satisfied_by_artifact) {
         require_matching_coords(coords, graph.vertex_count(), "algorithm '" + name + "'");
     }
 

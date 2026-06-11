@@ -33,6 +33,19 @@ using transport::VertexId;
 
 namespace {
 
+transport::alt::LandmarkStrategy parse_alt_landmark_strategy(std::string_view strategy) {
+    if (strategy == "random") {
+        return transport::alt::LandmarkStrategy::Random;
+    }
+    if (strategy == "farthest") {
+        return transport::alt::LandmarkStrategy::Farthest;
+    }
+    if (strategy == "planar") {
+        return transport::alt::LandmarkStrategy::Planar;
+    }
+    throw std::invalid_argument("unsupported ALT landmark strategy: " + std::string(strategy));
+}
+
 bench::Json preprocess_to_json(const PreprocessReport &report, const RoutingAlgorithm &algorithm) {
     bench::Json j;
     j["dependency_wall_s"] = to_seconds(report.dependency.wall);
@@ -123,6 +136,7 @@ int main(int argc, char **argv) {
     std::string algorithm_name;
     std::string variant;
     RoutingPreprocessingContext context;
+    std::string alt_landmark_strategy_str;
 
     CLI::App app{"Replay saved query pairs against one routing algorithm.\n"
                  "Loads a single algorithm per process for clean RSS accounting.\n"
@@ -158,6 +172,14 @@ int main(int argc, char **argv) {
         ->check(CLI::IsMember({"grid", "inertial", "kaminpar"}));
     app.add_option("--arcflags-threads", context.arcflags_threads, "Arc Flags: preprocessing thread count (default 1)")
         ->check(CLI::PositiveNumber);
+    app.add_option("--alt-landmark-strategy", alt_landmark_strategy_str,
+                   "ALT: landmark strategy: random|farthest|planar (default farthest)")
+        ->check(CLI::IsMember({"random", "farthest", "planar"}));
+    app.add_option("--alt-landmarks", context.alt_landmark_count, "ALT: total landmark count (default 16)")
+        ->check(CLI::PositiveNumber);
+    app.add_option("--alt-active-landmarks", context.alt_active_landmarks,
+                   "ALT: active landmarks selected per query (default 4)")
+        ->check(CLI::PositiveNumber);
 
     try {
         app.parse(argc, argv);
@@ -168,6 +190,14 @@ int main(int argc, char **argv) {
     if (!arcflags_partition_str.empty()) {
         try {
             context.arcflags_partition = transport::parse_partition_method(arcflags_partition_str);
+        } catch (const std::exception &err) {
+            std::cerr << err.what() << "\n";
+            return 1;
+        }
+    }
+    if (!alt_landmark_strategy_str.empty()) {
+        try {
+            context.alt_landmark_strategy = parse_alt_landmark_strategy(alt_landmark_strategy_str);
         } catch (const std::exception &err) {
             std::cerr << err.what() << "\n";
             return 1;

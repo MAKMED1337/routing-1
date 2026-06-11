@@ -43,20 +43,28 @@ Distance compute_potential(const alt::LandmarkSet &landmarks, const std::vector<
     return best;
 }
 
-alt::LandmarkSet default_landmarks(const Graph &graph) {
+alt::LandmarkSet build_configured_landmarks(const Graph &graph, alt::LandmarkStrategy strategy, uint32_t landmark_count,
+                                            std::span<const NodeCoord> coords) {
     std::mt19937 rng{42};
     const Graph reverse = build_reverse_graph(graph);
-    return alt::build_landmarks(graph, reverse, 16, alt::LandmarkStrategy::Farthest, rng);
+    return alt::build_landmarks(graph, reverse, landmark_count, strategy, rng, coords);
 }
 
 } // namespace
 
-AltAlgorithm::AltAlgorithm(const Graph &graph)
-    : graph_(graph), active_landmarks_(4), landmarks_{}, preprocessed_(false),
+AltAlgorithm::AltAlgorithm(const Graph &graph) : AltAlgorithm(graph, alt::LandmarkStrategy::Farthest, 16, 4) {}
+
+AltAlgorithm::AltAlgorithm(const Graph &graph, alt::LandmarkStrategy landmark_strategy, uint32_t landmark_count,
+                           uint32_t active_landmarks, std::span<const NodeCoord> coords)
+    : graph_(graph), active_landmarks_(active_landmarks), landmark_strategy_(landmark_strategy),
+      landmark_count_(landmark_count), landmark_coords_(coords.begin(), coords.end()), landmarks_{},
+      preprocessed_(false),
       astar_(graph, [this](VertexId vertex, VertexId target) { return potential(vertex, target); }) {}
 
 AltAlgorithm::AltAlgorithm(const Graph &graph, alt::LandmarkSet landmarks, uint32_t active_landmarks)
-    : graph_(graph), active_landmarks_(active_landmarks), landmarks_(std::move(landmarks)), preprocessed_(true),
+    : graph_(graph), active_landmarks_(active_landmarks), landmark_strategy_(alt::LandmarkStrategy::Farthest),
+      landmark_count_(static_cast<uint32_t>(landmarks.landmarks.size())), landmarks_(std::move(landmarks)),
+      preprocessed_(true),
       astar_(graph, [this](VertexId vertex, VertexId target) { return potential(vertex, target); }) {}
 
 std::string_view AltAlgorithm::name() const { return "alt"; }
@@ -65,7 +73,7 @@ void AltAlgorithm::preprocess() {
     if (preprocessed_) {
         return;
     }
-    landmarks_ = default_landmarks(graph_);
+    landmarks_ = build_configured_landmarks(graph_, landmark_strategy_, landmark_count_, landmark_coords_);
     preprocessed_ = true;
 }
 
