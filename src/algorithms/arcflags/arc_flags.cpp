@@ -49,6 +49,103 @@ void validate_loaded_arcflags(const Graph &graph, const ArcFlagsPreprocessedData
         }
     }
 }
+
+std::vector<std::vector<VertexId>>
+find_boundary_vertices_by_region(const Graph &graph, const std::vector<uint16_t> &region_of, uint16_t regions) {
+    const VertexId vertices = graph.vertex_count();
+    std::vector<bool> is_boundary(vertices, false);
+    for (VertexId u = 0; u < vertices; ++u) {
+        for (const Edge &e : graph.adjacent_edges(u)) {
+            if (region_of[u] != region_of[e.to]) {
+                is_boundary[e.to] = true;
+            }
+        }
+    }
+
+    std::vector<std::vector<VertexId>> boundary_by_region(regions);
+    for (VertexId v = 0; v < vertices; ++v) {
+        if (is_boundary[v]) {
+            boundary_by_region[region_of[v]].push_back(v);
+        }
+    }
+    return boundary_by_region;
+}
+
+void compute_flags(const Graph &graph, const PhastAlgorithm &phast,
+                   const std::vector<std::vector<VertexId>> &boundary_by_region, uint16_t regions, uint32_t threads,
+                   std::vector<uint64_t> &forward_flags) {
+    struct WorkItem {
+        uint32_t region;
+        size_t batch_start;
+    };
+    std::vector<WorkItem> work;
+    for (uint32_t region = 0; region < regions; ++region) {
+        const auto &bvs = boundary_by_region[region];
+        for (size_t batch_start = 0; batch_start < bvs.size(); batch_start += kBatchSize) {
+            work.push_back({region, batch_start});
+        }
+    }
+    if (work.empty()) {
+        return;
+    }
+
+    const VertexId vertices = graph.vertex_count();
+    const size_t *offsets = graph.offsets.data();
+    const Edge *edges = graph.edges.data();
+    uint64_t *flags = forward_flags.data();
+    std::atomic<size_t> work_idx{0};
+
+    auto worker = [&]() {
+        std::vector<Distance> dist;
+        std::vector<VertexId> batch;
+        batch.reserve(kBatchSize);
+
+        while (true) {
+            const size_t wi = work_idx.fetch_add(1, std::memory_order_relaxed);
+            if (wi >= work.size()) {
+                break;
+            }
+
+            const uint32_t region = work[wi].region;
+            const size_t batch_start = work[wi].batch_start;
+            const auto &bvs = boundary_by_region[region];
+            const size_t batch_size = std::min(kBatchSize, bvs.size() - batch_start);
+            const uint64_t mask_bit = 1ULL << region;
+
+            batch.assign(bvs.begin() + static_cast<ptrdiff_t>(batch_start),
+                         bvs.begin() + static_cast<ptrdiff_t>(batch_start + batch_size));
+
+            phast.all_to_one_batch(batch, dist);
+            const size_t lanes = batch_size;
+
+            for (VertexId u = 0; u < vertices; ++u) {
+                const Distance *du = &dist[u * lanes];
+                for (size_t k = offsets[u], end = offsets[u + 1]; k < end; ++k) {
+                    const Edge &e = edges[k];
+                    const Distance *dv = &dist[e.to * lanes];
+                    for (size_t lane = 0; lane < lanes; ++lane) {
+                        if (du[lane] == kUnreachable || dv[lane] == kUnreachable) {
+                            continue;
+                        }
+                        if (du[lane] == static_cast<Distance>(e.weight) + dv[lane]) {
+                            std::atomic_ref<uint64_t>(flags[k]).fetch_or(mask_bit, std::memory_order_relaxed);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    };
+
+    std::vector<std::thread> pool;
+    pool.reserve(threads);
+    for (uint32_t t = 0; t < threads; ++t) {
+        pool.emplace_back(worker);
+    }
+    for (auto &th : pool) {
+        th.join();
+    }
+}
 } // namespace
 
 ArcFlagsAlgorithm::ArcFlagsAlgorithm(const Graph &graph, PhastAlgorithm &&phast, uint16_t regions,
@@ -75,119 +172,11 @@ void ArcFlagsAlgorithm::preprocess() {
         return;
     }
 
-    const VertexId V = graph_.vertex_count();
-    const size_t E = graph_.edges.size();
-
     if (!phast_) {
         throw std::logic_error("arcflags: PHAST dependency is required to preprocess()");
     }
 
-    region_of_ = build_partition(graph_, regions_, partition_method_, coords_);
-
-    // v is a boundary vertex of its region if any in-neighbor is from a different region.
-    std::vector<bool> is_boundary(V, false);
-    for (VertexId u = 0; u < V; ++u) {
-        for (const Edge &e : graph_.adjacent_edges(u)) {
-            if (region_of_[u] != region_of_[e.to]) {
-                is_boundary[e.to] = true;
-            }
-        }
-    }
-
-    std::vector<std::vector<VertexId>> boundary_by_region(regions_);
-    for (VertexId v = 0; v < V; ++v) {
-        if (is_boundary[v]) {
-            boundary_by_region[region_of_[v]].push_back(v);
-        }
-    }
-
-    forward_flags_.assign(E, 0);
-    compute_flags(boundary_by_region);
-
-    // Own-region rule: every arc u→v unconditionally gets bit region_of_[v] set.
-    for (VertexId u = 0; u < V; ++u) {
-        for (size_t k = graph_.offsets[u], end = graph_.offsets[u + 1]; k < end; ++k) {
-            forward_flags_[k] |= 1ULL << region_of_[graph_.edges[k].to];
-        }
-    }
-
-    preprocessed_ = true;
-}
-
-void ArcFlagsAlgorithm::compute_flags(const std::vector<std::vector<VertexId>> &boundary_by_region) {
-    struct WorkItem {
-        uint32_t region;
-        size_t batch_start;
-    };
-    std::vector<WorkItem> work;
-    for (uint32_t R = 0; R < regions_; ++R) {
-        const auto &bvs = boundary_by_region[R];
-        for (size_t bs = 0; bs < bvs.size(); bs += kBatchSize) {
-            work.push_back({R, bs});
-        }
-    }
-    if (work.empty()) {
-        return;
-    }
-
-    const VertexId V = graph_.vertex_count();
-    const size_t *offsets = graph_.offsets.data();
-    const Edge *edges = graph_.edges.data();
-    uint64_t *flags = forward_flags_.data();
-    std::atomic<size_t> work_idx{0};
-
-    auto worker = [&]() {
-        std::vector<Distance> dist;
-        std::vector<VertexId> batch;
-        batch.reserve(kBatchSize);
-
-        while (true) {
-            const size_t wi = work_idx.fetch_add(1, std::memory_order_relaxed);
-            if (wi >= work.size()) {
-                break;
-            }
-
-            const uint32_t R = work[wi].region;
-            const size_t bs = work[wi].batch_start;
-            const auto &bvs = boundary_by_region[R];
-            const size_t batch_size = std::min(kBatchSize, bvs.size() - bs);
-            const uint64_t mask_bit = 1ULL << R;
-
-            batch.assign(bvs.begin() + static_cast<ptrdiff_t>(bs),
-                         bvs.begin() + static_cast<ptrdiff_t>(bs + batch_size));
-
-            phast_->all_to_one_batch(batch, dist);
-            // dist[v * B + lane] = d(v, batch[lane])
-            const size_t B = batch_size;
-
-            for (VertexId u = 0; u < V; ++u) {
-                const Distance *du = &dist[u * B];
-                for (size_t k = offsets[u], end = offsets[u + 1]; k < end; ++k) {
-                    const Edge &e = edges[k];
-                    const Distance *dv = &dist[e.to * B];
-                    for (size_t lane = 0; lane < B; ++lane) {
-                        if (du[lane] == kUnreachable || dv[lane] == kUnreachable) {
-                            continue;
-                        }
-                        // Equality rule: arc lies on a shortest path to batch[lane].
-                        if (du[lane] == static_cast<Distance>(e.weight) + dv[lane]) {
-                            std::atomic_ref<uint64_t>(flags[k]).fetch_or(mask_bit, std::memory_order_relaxed);
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-    };
-
-    std::vector<std::thread> pool;
-    pool.reserve(threads_);
-    for (uint32_t t = 0; t < threads_; ++t) {
-        pool.emplace_back(worker);
-    }
-    for (auto &th : pool) {
-        th.join();
-    }
+    load_preprocessed(build_arc_flags(graph_, *phast_, regions_, partition_method_, threads_, coords_));
 }
 
 void ArcFlagsAlgorithm::load_preprocessed(ArcFlagsPreprocessedData &&data) {
@@ -209,6 +198,33 @@ ArcFlagsPreprocessedData ArcFlagsAlgorithm::export_preprocessed() const {
         .region_of = region_of_,
         .forward_flags = forward_flags_,
     };
+}
+
+ArcFlagsPreprocessedData build_arc_flags(const Graph &graph, PhastAlgorithm &phast, uint16_t regions,
+                                         PartitionMethod partition_method, uint32_t threads,
+                                         std::span<const NodeCoord> coords) {
+    validate_arcflags_parameters(regions, partition_method, threads);
+    if (phast.vertex_count() != graph.vertex_count()) {
+        throw std::invalid_argument("arcflags: PHAST vertex count does not match graph");
+    }
+
+    ArcFlagsPreprocessedData data;
+    data.regions = regions;
+    data.partition_method = partition_method;
+    data.region_of = build_partition(graph, regions, partition_method, coords);
+    data.forward_flags.assign(graph.edges.size(), 0);
+
+    const std::vector<std::vector<VertexId>> boundary_by_region =
+        find_boundary_vertices_by_region(graph, data.region_of, regions);
+    compute_flags(graph, phast, boundary_by_region, regions, threads, data.forward_flags);
+
+    for (VertexId u = 0; u < graph.vertex_count(); ++u) {
+        for (size_t k = graph.offsets[u], end = graph.offsets[u + 1]; k < end; ++k) {
+            data.forward_flags[k] |= 1ULL << data.region_of[graph.edges[k].to];
+        }
+    }
+
+    return data;
 }
 
 PathResult ArcFlagsAlgorithm::query(VertexId source, VertexId target) const {

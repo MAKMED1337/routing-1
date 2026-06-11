@@ -1,13 +1,12 @@
-#include "graph/graph_io.hpp"
+#include "io/graph_io.hpp"
 
-#include <array>
-#include <bit>
 #include <cstddef>
 #include <cstdint>
 #include <fstream>
 #include <limits>
 #include <stdexcept>
-#include <type_traits>
+
+#include "io/binary_io.hpp"
 
 namespace transport {
 
@@ -32,20 +31,6 @@ size_t memory_offset(uint64_t offset) {
         }
     }
     return static_cast<size_t>(offset);
-}
-
-template <typename T> void write_one(std::ofstream &out, const T &value) {
-    static_assert(std::is_trivially_copyable_v<T>);
-    const auto bytes = std::bit_cast<std::array<char, sizeof(T)>>(value);
-    out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
-}
-
-template <typename T> bool read_one(std::ifstream &in, T &value) {
-    static_assert(std::is_trivially_copyable_v<T>);
-    std::array<char, sizeof(T)> bytes{};
-    in.read(bytes.data(), static_cast<std::streamsize>(bytes.size()));
-    value = std::bit_cast<T>(bytes);
-    return static_cast<bool>(in);
 }
 
 void validate_graph(const Graph &graph, uint64_t expected_edges) {
@@ -83,13 +68,13 @@ void validate_graph(const Graph &graph, uint64_t expected_edges) {
 
 } // namespace
 
-bool save_graph_binary(const Graph &graph, const std::string &path) {
+bool save_graph_binary(const Graph &graph, const std::filesystem::path &path) {
     std::ofstream out(path, std::ios::binary);
     if (!out) {
         return false;
     }
 
-    write_one(out, kMagicIntWeights);
+    io::write_one(out, kMagicIntWeights);
     // TRG3 stores the vertex count as a fixed-width header field.
     const VertexId vertex_count = graph.vertex_count();
     if (vertex_count > std::numeric_limits<uint32_t>::max()) {
@@ -97,25 +82,24 @@ bool save_graph_binary(const Graph &graph, const std::string &path) {
     }
     const uint32_t vertices = static_cast<uint32_t>(vertex_count);
     const uint64_t edges = graph.edge_count();
-    write_one(out, vertices);
-    write_one(out, edges);
+    io::write_one(out, vertices);
+    io::write_one(out, edges);
 
     for (const size_t offset : graph.offsets) {
-        write_one(out, stored_offset(offset));
+        io::write_one(out, stored_offset(offset));
     }
-    out.write(reinterpret_cast<const char *>(graph.edges.data()),
-              static_cast<std::streamsize>(graph.edges.size() * sizeof(Edge)));
+    io::write_span(out, std::span<const Edge>(graph.edges));
     return static_cast<bool>(out);
 }
 
-Graph load_graph_binary(const std::string &path) {
+Graph load_graph_binary(const std::filesystem::path &path) {
     std::ifstream in(path, std::ios::binary);
     if (!in) {
-        throw std::runtime_error("failed to open graph file: " + path);
+        throw std::runtime_error("failed to open graph file: " + path.string());
     }
 
     uint32_t magic = 0;
-    if (!read_one(in, magic)) {
+    if (!io::read_one(in, magic)) {
         throw std::runtime_error("corrupted graph file: failed to read magic");
     }
     if (magic != kMagicIntWeights) {
@@ -124,10 +108,10 @@ Graph load_graph_binary(const std::string &path) {
 
     uint32_t vertices = 0;
     uint64_t edges = 0;
-    if (!read_one(in, vertices)) {
+    if (!io::read_one(in, vertices)) {
         throw std::runtime_error("corrupted graph file: failed to read vertex count");
     }
-    if (!read_one(in, edges)) {
+    if (!io::read_one(in, edges)) {
         throw std::runtime_error("corrupted graph file: failed to read edge count");
     }
 
@@ -139,50 +123,46 @@ Graph load_graph_binary(const std::string &path) {
 
     for (size_t &offset : graph.offsets) {
         uint64_t stored_offset = 0;
-        read_one(in, stored_offset);
+        io::read_one(in, stored_offset);
         if (!in) {
             throw std::runtime_error("corrupted graph file");
         }
         offset = memory_offset(stored_offset);
     }
 
-    in.read(reinterpret_cast<char *>(graph.edges.data()),
-            static_cast<std::streamsize>(graph.edges.size() * sizeof(Edge)));
-    if (!in) {
-        throw std::runtime_error("corrupted graph file");
-    }
+    io::read_span(in, std::span<Edge>(graph.edges), "corrupted graph file");
 
     validate_graph(graph, edges);
     return graph;
 }
 
-bool save_coords_binary(std::span<const NodeCoord> coords, const std::string &path) {
+bool save_coords_binary(std::span<const NodeCoord> coords, const std::filesystem::path &path) {
     std::ofstream out(path, std::ios::binary);
     if (!out) {
         return false;
     }
 
-    write_one(out, kMagicCoords);
+    io::write_one(out, kMagicCoords);
     if (coords.size() > std::numeric_limits<uint32_t>::max()) {
         throw std::runtime_error("too many coordinates for CRD1 binary format");
     }
     const auto vertices = static_cast<uint32_t>(coords.size());
-    write_one(out, vertices);
+    io::write_one(out, vertices);
     for (const NodeCoord &node : coords) {
-        write_one(out, node.lat);
-        write_one(out, node.lon);
+        io::write_one(out, node.lat);
+        io::write_one(out, node.lon);
     }
     return static_cast<bool>(out);
 }
 
-std::vector<NodeCoord> load_coords_binary(const std::string &path) {
+std::vector<NodeCoord> load_coords_binary(const std::filesystem::path &path) {
     std::ifstream in(path, std::ios::binary);
     if (!in) {
-        throw std::runtime_error("failed to open coords file: " + path);
+        throw std::runtime_error("failed to open coords file: " + path.string());
     }
 
     uint32_t magic = 0;
-    if (!read_one(in, magic)) {
+    if (!io::read_one(in, magic)) {
         throw std::runtime_error("corrupted coords file: failed to read magic");
     }
     if (magic != kMagicCoords) {
@@ -190,14 +170,14 @@ std::vector<NodeCoord> load_coords_binary(const std::string &path) {
     }
 
     uint32_t vertices = 0;
-    if (!read_one(in, vertices)) {
+    if (!io::read_one(in, vertices)) {
         throw std::runtime_error("corrupted coords file: failed to read vertex count");
     }
 
     std::vector<NodeCoord> coords(vertices);
     for (NodeCoord &node : coords) {
-        read_one(in, node.lat);
-        read_one(in, node.lon);
+        io::read_one(in, node.lat);
+        io::read_one(in, node.lon);
         if (!in) {
             throw std::runtime_error("corrupted coords file");
         }

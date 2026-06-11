@@ -6,6 +6,7 @@
 #include "graph/graph.hpp"
 
 #include <chrono>
+#include <filesystem>
 #include <memory>
 #include <optional>
 #include <span>
@@ -50,10 +51,10 @@ struct RoutingInstance {
 };
 
 struct RoutingPreprocessingContext {
-    std::optional<std::string> ch_load_path;
-    std::optional<std::string> ch_save_path;
-    std::optional<std::string> arcflags_load_path;
-    std::optional<std::string> arcflags_save_path;
+    std::optional<std::filesystem::path> ch_load_path;
+    std::optional<std::filesystem::path> ch_save_path;
+    std::optional<std::filesystem::path> arcflags_load_path;
+    std::optional<std::filesystem::path> arcflags_save_path;
 };
 
 // Validates `name`/`coords`, builds any CH/PHAST dependency the algorithm needs, constructs the

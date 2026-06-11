@@ -47,13 +47,13 @@ add_library(transport_core
   src/algorithms/alt/alt.cpp
   src/algorithms/alt/landmarks.cpp
   src/algorithms/astar.cpp
-  src/algorithms/ch/ch_io.cpp
+  src/io/ch_io.cpp
   src/algorithms/ch/contraction_hierarchy.cpp
   src/algorithms/ch/node_order.cpp
   src/algorithms/ch/witness_search.cpp
   src/algorithms/ch/work_graph.cpp
   src/algorithms/arcflags/arc_flags.cpp
-  src/algorithms/arcflags/arc_flags_io.cpp
+  src/io/arc_flags_io.cpp
   src/algorithms/chase/chase.cpp
   src/algorithms/hl/hub_labels.cpp
   src/algorithms/bidirectional_astar.cpp
@@ -63,7 +63,7 @@ add_library(transport_core
   src/algorithms/phast.cpp
   src/graph/geometry.cpp
   src/graph/graph.cpp
-  src/graph/graph_io.cpp
+  src/io/graph_io.cpp
   src/graph/reverse_graph.cpp
   src/algorithms/routing_instance.cpp
   src/algorithms/shortest_paths.cpp

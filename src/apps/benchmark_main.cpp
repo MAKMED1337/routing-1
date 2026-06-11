@@ -2,7 +2,7 @@
 #include "algorithms/routing_algorithm.hpp"
 #include "algorithms/routing_instance.hpp"
 #include "apps/bench_utils.hpp"
-#include "graph/graph_io.hpp"
+#include "io/graph_io.hpp"
 #include "routing/routing.hpp"
 
 #include <CLI/CLI.hpp>
@@ -161,14 +161,6 @@ int main(int argc, char **argv) {
     uint32_t min_settled = 100'000;
     uint32_t max_settled = 1'000'000;
     uint32_t seed = 1;
-    std::string algorithm_a_ch_load_path;
-    std::string algorithm_a_ch_save_path;
-    std::string algorithm_a_arcflags_load_path;
-    std::string algorithm_a_arcflags_save_path;
-    std::string algorithm_b_ch_load_path;
-    std::string algorithm_b_ch_save_path;
-    std::string algorithm_b_arcflags_load_path;
-    std::string algorithm_b_arcflags_save_path;
     transport::RoutingPreprocessingContext context_a;
     transport::RoutingPreprocessingContext context_b;
 
@@ -185,52 +177,27 @@ int main(int argc, char **argv) {
     app.add_option("--seed", seed, "Random seed")->default_val(1);
     app.add_option("--algorithm-a", algorithm_a, "First routing algorithm")->default_val("dijkstra");
     app.add_option("--algorithm-b", algorithm_b, "Second routing algorithm")->default_val("ch");
-    app.add_option("--algorithm-a-ch-load", algorithm_a_ch_load_path, "Load CH artifact for algorithm A")
+    app.add_option("--algorithm-a-ch-load", context_a.ch_load_path, "Load CH artifact for algorithm A")
         ->check(CLI::ExistingFile);
-    app.add_option("--algorithm-a-ch-save", algorithm_a_ch_save_path, "Save CH artifact for algorithm A");
-    app.add_option("--algorithm-a-arcflags-load", algorithm_a_arcflags_load_path,
+    app.add_option("--algorithm-a-ch-save", context_a.ch_save_path, "Save CH artifact for algorithm A");
+    app.add_option("--algorithm-a-arcflags-load", context_a.arcflags_load_path,
                    "Load ArcFlags artifact for algorithm A")
         ->check(CLI::ExistingFile);
-    app.add_option("--algorithm-a-arcflags-save", algorithm_a_arcflags_save_path,
+    app.add_option("--algorithm-a-arcflags-save", context_a.arcflags_save_path,
                    "Save ArcFlags artifact for algorithm A");
-    app.add_option("--algorithm-b-ch-load", algorithm_b_ch_load_path, "Load CH artifact for algorithm B")
+    app.add_option("--algorithm-b-ch-load", context_b.ch_load_path, "Load CH artifact for algorithm B")
         ->check(CLI::ExistingFile);
-    app.add_option("--algorithm-b-ch-save", algorithm_b_ch_save_path, "Save CH artifact for algorithm B");
-    app.add_option("--algorithm-b-arcflags-load", algorithm_b_arcflags_load_path,
+    app.add_option("--algorithm-b-ch-save", context_b.ch_save_path, "Save CH artifact for algorithm B");
+    app.add_option("--algorithm-b-arcflags-load", context_b.arcflags_load_path,
                    "Load ArcFlags artifact for algorithm B")
         ->check(CLI::ExistingFile);
-    app.add_option("--algorithm-b-arcflags-save", algorithm_b_arcflags_save_path,
+    app.add_option("--algorithm-b-arcflags-save", context_b.arcflags_save_path,
                    "Save ArcFlags artifact for algorithm B");
 
     try {
         app.parse(argc, argv);
     } catch (const CLI::ParseError &err) {
         return app.exit(err);
-    }
-
-    if (!algorithm_a_ch_load_path.empty()) {
-        context_a.ch_load_path = algorithm_a_ch_load_path;
-    }
-    if (!algorithm_a_ch_save_path.empty()) {
-        context_a.ch_save_path = algorithm_a_ch_save_path;
-    }
-    if (!algorithm_a_arcflags_load_path.empty()) {
-        context_a.arcflags_load_path = algorithm_a_arcflags_load_path;
-    }
-    if (!algorithm_a_arcflags_save_path.empty()) {
-        context_a.arcflags_save_path = algorithm_a_arcflags_save_path;
-    }
-    if (!algorithm_b_ch_load_path.empty()) {
-        context_b.ch_load_path = algorithm_b_ch_load_path;
-    }
-    if (!algorithm_b_ch_save_path.empty()) {
-        context_b.ch_save_path = algorithm_b_ch_save_path;
-    }
-    if (!algorithm_b_arcflags_load_path.empty()) {
-        context_b.arcflags_load_path = algorithm_b_arcflags_load_path;
-    }
-    if (!algorithm_b_arcflags_save_path.empty()) {
-        context_b.arcflags_save_path = algorithm_b_arcflags_save_path;
     }
 
     if (queries == 0) {

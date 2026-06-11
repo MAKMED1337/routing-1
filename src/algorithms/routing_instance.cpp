@@ -2,11 +2,9 @@
 
 #include "algorithms/alt/alt.hpp"
 #include "algorithms/arcflags/arc_flags.hpp"
-#include "algorithms/arcflags/arc_flags_io.hpp"
 #include "algorithms/astar.hpp"
 #include "algorithms/bidirectional_astar.hpp"
 #include "algorithms/bidirectional_dijkstra.hpp"
-#include "algorithms/ch/ch_io.hpp"
 #include "algorithms/ch/contraction_hierarchy.hpp"
 #include "algorithms/chase/chase.hpp"
 #include "algorithms/dijkstra.hpp"
@@ -15,6 +13,8 @@
 #include "algorithms/partition.hpp"
 #include "algorithms/phast.hpp"
 #include "algorithms/stopwatch.hpp"
+#include "io/arc_flags_io.hpp"
+#include "io/ch_io.hpp"
 
 #include <cmath>
 #include <set>
@@ -70,7 +70,7 @@ ContractionHierarchyBuildResult build_or_load_ch(const Graph &graph, const Routi
         dependency_stats.wall = dependency_sw.wall_elapsed();
         dependency_stats.cpu = dependency_sw.cpu_elapsed();
         dependency_stats.process_peak_rss_mb = peak_rss_mb();
-        report.ch_loaded_from = context.ch_load_path;
+        report.ch_loaded_from = context.ch_load_path->string();
         return result;
     }
 
@@ -81,9 +81,9 @@ ContractionHierarchyBuildResult build_or_load_ch(const Graph &graph, const Routi
     dependency_stats.process_peak_rss_mb = peak_rss_mb();
     if (context.ch_save_path) {
         if (!ch::save_ch(result.hierarchy, *context.ch_save_path)) {
-            throw std::runtime_error("failed to save CH artifact: " + *context.ch_save_path);
+            throw std::runtime_error("failed to save CH artifact: " + context.ch_save_path->string());
         }
-        report.ch_saved_to = context.ch_save_path;
+        report.ch_saved_to = context.ch_save_path->string();
     }
     return result;
 }
@@ -119,7 +119,7 @@ std::unique_ptr<RoutingAlgorithm> build_algorithm(const std::string &name, const
     if (name == "arcflags") {
         if (context.arcflags_load_path) {
             ArcFlagsPreprocessedData data = arcflags::load_arc_flags(*context.arcflags_load_path);
-            report.arcflags_loaded_from = context.arcflags_load_path;
+            report.arcflags_loaded_from = context.arcflags_load_path->string();
             return std::make_unique<ArcFlagsAlgorithm>(graph, std::move(data));
         }
         ContractionHierarchyBuildResult built = build_or_load_ch(graph, context, dependency_stats, report);
@@ -169,17 +169,17 @@ RoutingInstance make_routing_instance(const std::string &name, const Graph &grap
     if (context.ch_save_path && name == "ch") {
         const auto *ch_algorithm = dynamic_cast<const ContractionHierarchyAlgorithm *>(algorithm.get());
         if (ch_algorithm == nullptr || !ch::save_ch(ch_algorithm->get_ch(), *context.ch_save_path)) {
-            throw std::runtime_error("failed to save CH artifact: " + *context.ch_save_path);
+            throw std::runtime_error("failed to save CH artifact: " + context.ch_save_path->string());
         }
-        report.ch_saved_to = context.ch_save_path;
+        report.ch_saved_to = context.ch_save_path->string();
     }
     if (context.arcflags_save_path) {
         const auto *arcflags_algorithm = dynamic_cast<const ArcFlagsAlgorithm *>(algorithm.get());
         if (arcflags_algorithm == nullptr ||
             !arcflags::save_arc_flags(arcflags_algorithm->export_preprocessed(), *context.arcflags_save_path)) {
-            throw std::runtime_error("failed to save ArcFlags artifact: " + *context.arcflags_save_path);
+            throw std::runtime_error("failed to save ArcFlags artifact: " + context.arcflags_save_path->string());
         }
-        report.arcflags_saved_to = context.arcflags_save_path;
+        report.arcflags_saved_to = context.arcflags_save_path->string();
     }
 
     return RoutingInstance{std::move(algorithm), report};

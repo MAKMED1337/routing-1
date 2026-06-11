@@ -1,35 +1,19 @@
-#include "algorithms/ch/ch_io.hpp"
+#include "io/ch_io.hpp"
 
 #include <algorithm>
-#include <array>
-#include <bit>
 #include <cstdint>
 #include <fstream>
 #include <limits>
 #include <stdexcept>
-#include <string>
-#include <type_traits>
 #include <vector>
+
+#include "io/binary_io.hpp"
 
 namespace transport::ch {
 namespace {
 
 constexpr uint32_t kChMagic = 0x48435254U; // TRCH, little-endian
 constexpr uint32_t kChVersion = 1;
-
-template <typename T> void write_one(std::ofstream &out, const T &value) {
-    static_assert(std::is_trivially_copyable_v<T>);
-    const auto bytes = std::bit_cast<std::array<char, sizeof(T)>>(value);
-    out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
-}
-
-template <typename T> bool read_one(std::ifstream &in, T &value) {
-    static_assert(std::is_trivially_copyable_v<T>);
-    std::array<char, sizeof(T)> bytes{};
-    in.read(bytes.data(), static_cast<std::streamsize>(bytes.size()));
-    value = std::bit_cast<T>(bytes);
-    return static_cast<bool>(in);
-}
 
 uint64_t stored_vertex(VertexId vertex) {
     if constexpr (std::numeric_limits<VertexId>::max() > std::numeric_limits<uint64_t>::max()) {
@@ -59,30 +43,24 @@ size_t memory_size(uint64_t value) {
 }
 
 void write_offsets(std::ofstream &out, const std::vector<uint64_t> &offsets) {
-    for (const uint64_t offset : offsets) {
-        write_one(out, offset);
-    }
+    io::write_span(out, std::span<const uint64_t>(offsets));
 }
 
 void read_offsets(std::ifstream &in, std::vector<uint64_t> &offsets) {
-    for (uint64_t &offset : offsets) {
-        if (!read_one(in, offset)) {
-            throw std::runtime_error("ch_io: truncated offsets");
-        }
-    }
+    io::read_span(in, std::span<uint64_t>(offsets), "ch_io: truncated offsets");
 }
 
 void write_edges(std::ofstream &out, const std::vector<Edge> &edges) {
     for (const Edge &edge : edges) {
-        write_one(out, stored_vertex(edge.to));
-        write_one(out, edge.weight);
+        io::write_one(out, stored_vertex(edge.to));
+        io::write_one(out, edge.weight);
     }
 }
 
 void read_edges(std::ifstream &in, std::vector<Edge> &edges) {
     for (Edge &edge : edges) {
         uint64_t to = 0;
-        if (!read_one(in, to) || !read_one(in, edge.weight)) {
+        if (!io::read_one(in, to) || !io::read_one(in, edge.weight)) {
             throw std::runtime_error("ch_io: truncated edges");
         }
         edge.to = memory_vertex(to);
@@ -130,7 +108,7 @@ void validate_ch(const ContractionHierarchy &ch) {
 
 } // namespace
 
-bool save_ch(const ContractionHierarchy &ch, const std::string &path) {
+bool save_ch(const ContractionHierarchy &ch, const std::filesystem::path &path) {
     validate_ch(ch);
 
     std::ofstream out(path, std::ios::binary);
@@ -138,14 +116,12 @@ bool save_ch(const ContractionHierarchy &ch, const std::string &path) {
         return false;
     }
 
-    write_one(out, kChMagic);
-    write_one(out, kChVersion);
-    write_one(out, static_cast<uint32_t>(ch.vertex_count()));
-    write_one(out, static_cast<uint64_t>(ch.forward_edges.size()));
-    write_one(out, static_cast<uint64_t>(ch.backward_edges.size()));
-    for (const uint32_t rank : ch.rank) {
-        write_one(out, rank);
-    }
+    io::write_one(out, kChMagic);
+    io::write_one(out, kChVersion);
+    io::write_one(out, static_cast<uint32_t>(ch.vertex_count()));
+    io::write_one(out, static_cast<uint64_t>(ch.forward_edges.size()));
+    io::write_one(out, static_cast<uint64_t>(ch.backward_edges.size()));
+    io::write_span(out, std::span<const uint32_t>(ch.rank));
     write_offsets(out, ch.forward_offsets);
     write_edges(out, ch.forward_edges);
     write_offsets(out, ch.backward_offsets);
@@ -153,10 +129,10 @@ bool save_ch(const ContractionHierarchy &ch, const std::string &path) {
     return static_cast<bool>(out);
 }
 
-ContractionHierarchy load_ch(const std::string &path) {
+ContractionHierarchy load_ch(const std::filesystem::path &path) {
     std::ifstream in(path, std::ios::binary);
     if (!in) {
-        throw std::runtime_error("ch_io: failed to open file: " + path);
+        throw std::runtime_error("ch_io: failed to open file: " + path.string());
     }
 
     uint32_t magic = 0;
@@ -164,8 +140,8 @@ ContractionHierarchy load_ch(const std::string &path) {
     uint32_t vertices = 0;
     uint64_t forward_edges = 0;
     uint64_t backward_edges = 0;
-    if (!read_one(in, magic) || !read_one(in, version) || !read_one(in, vertices) || !read_one(in, forward_edges) ||
-        !read_one(in, backward_edges)) {
+    if (!io::read_one(in, magic) || !io::read_one(in, version) || !io::read_one(in, vertices) ||
+        !io::read_one(in, forward_edges) || !io::read_one(in, backward_edges)) {
         throw std::runtime_error("ch_io: truncated header");
     }
     if (magic != kChMagic) {
@@ -182,11 +158,7 @@ ContractionHierarchy load_ch(const std::string &path) {
     ch.backward_offsets.resize(static_cast<size_t>(vertices) + 1);
     ch.backward_edges.resize(memory_size(backward_edges));
 
-    for (uint32_t &rank : ch.rank) {
-        if (!read_one(in, rank)) {
-            throw std::runtime_error("ch_io: truncated rank array");
-        }
-    }
+    io::read_span(in, std::span<uint32_t>(ch.rank), "ch_io: truncated rank array");
     read_offsets(in, ch.forward_offsets);
     read_edges(in, ch.forward_edges);
     read_offsets(in, ch.backward_offsets);

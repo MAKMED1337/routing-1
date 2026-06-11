@@ -1,4 +1,4 @@
-#include "graph/graph_io.hpp"
+#include "io/graph_io.hpp"
 #include "routing_test_utils.hpp"
 
 #include <cstdint>

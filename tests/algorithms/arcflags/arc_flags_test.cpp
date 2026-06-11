@@ -1,8 +1,8 @@
 #include "algorithms/arcflags/arc_flags.hpp"
-#include "algorithms/arcflags/arc_flags_io.hpp"
 #include "algorithms/ch/contraction_hierarchy.hpp"
 #include "algorithms/phast.hpp"
 #include "graph_fixtures.hpp"
+#include "io/arc_flags_io.hpp"
 #include "routing_test_utils.hpp"
 
 #include <filesystem>

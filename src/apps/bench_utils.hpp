@@ -2,7 +2,7 @@
 
 #include "algorithms/routing_algorithm.hpp"
 #include "algorithms/stopwatch.hpp"
-#include "graph/graph_io.hpp"
+#include "io/graph_io.hpp"
 
 #include <algorithm>
 #include <cassert>

@@ -1,35 +1,19 @@
-#include "algorithms/arcflags/arc_flags_io.hpp"
+#include "io/arc_flags_io.hpp"
 
 #include "algorithms/partition.hpp"
+#include "io/binary_io.hpp"
 
 #include <algorithm>
-#include <array>
-#include <bit>
 #include <cstdint>
 #include <fstream>
 #include <limits>
 #include <stdexcept>
-#include <type_traits>
 
 namespace transport::arcflags {
 namespace {
 
 constexpr uint32_t kArcFlagsMagic = 0x31464154U; // TAF1, little-endian
 constexpr uint32_t kArcFlagsVersion = 1;
-
-template <typename T> void write_one(std::ofstream &out, const T &value) {
-    static_assert(std::is_trivially_copyable_v<T>);
-    const auto bytes = std::bit_cast<std::array<char, sizeof(T)>>(value);
-    out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
-}
-
-template <typename T> bool read_one(std::ifstream &in, T &value) {
-    static_assert(std::is_trivially_copyable_v<T>);
-    std::array<char, sizeof(T)> bytes{};
-    in.read(bytes.data(), static_cast<std::streamsize>(bytes.size()));
-    value = std::bit_cast<T>(bytes);
-    return static_cast<bool>(in);
-}
 
 uint32_t stored_partition_method(PartitionMethod method) {
     switch (method) {
@@ -81,7 +65,7 @@ void validate_data(const ArcFlagsPreprocessedData &data) {
 
 } // namespace
 
-bool save_arc_flags(const ArcFlagsPreprocessedData &data, const std::string &path) {
+bool save_arc_flags(const ArcFlagsPreprocessedData &data, const std::filesystem::path &path) {
     validate_data(data);
 
     std::ofstream out(path, std::ios::binary);
@@ -89,23 +73,21 @@ bool save_arc_flags(const ArcFlagsPreprocessedData &data, const std::string &pat
         return false;
     }
 
-    write_one(out, kArcFlagsMagic);
-    write_one(out, kArcFlagsVersion);
-    write_one(out, static_cast<uint64_t>(data.region_of.size()));
-    write_one(out, static_cast<uint64_t>(data.forward_flags.size()));
-    write_one(out, static_cast<uint32_t>(data.regions));
-    write_one(out, stored_partition_method(data.partition_method));
-    out.write(reinterpret_cast<const char *>(data.region_of.data()),
-              static_cast<std::streamsize>(data.region_of.size() * sizeof(uint16_t)));
-    out.write(reinterpret_cast<const char *>(data.forward_flags.data()),
-              static_cast<std::streamsize>(data.forward_flags.size() * sizeof(uint64_t)));
+    io::write_one(out, kArcFlagsMagic);
+    io::write_one(out, kArcFlagsVersion);
+    io::write_one(out, static_cast<uint64_t>(data.region_of.size()));
+    io::write_one(out, static_cast<uint64_t>(data.forward_flags.size()));
+    io::write_one(out, static_cast<uint32_t>(data.regions));
+    io::write_one(out, stored_partition_method(data.partition_method));
+    io::write_span(out, std::span<const uint16_t>(data.region_of));
+    io::write_span(out, std::span<const uint64_t>(data.forward_flags));
     return static_cast<bool>(out);
 }
 
-ArcFlagsPreprocessedData load_arc_flags(const std::string &path) {
+ArcFlagsPreprocessedData load_arc_flags(const std::filesystem::path &path) {
     std::ifstream in(path, std::ios::binary);
     if (!in) {
-        throw std::runtime_error("arcflags_io: failed to open file: " + path);
+        throw std::runtime_error("arcflags_io: failed to open file: " + path.string());
     }
 
     uint32_t magic = 0;
@@ -114,8 +96,8 @@ ArcFlagsPreprocessedData load_arc_flags(const std::string &path) {
     uint64_t edges = 0;
     uint32_t regions = 0;
     uint32_t partition_method = 0;
-    if (!read_one(in, magic) || !read_one(in, version) || !read_one(in, vertices) || !read_one(in, edges) ||
-        !read_one(in, regions) || !read_one(in, partition_method)) {
+    if (!io::read_one(in, magic) || !io::read_one(in, version) || !io::read_one(in, vertices) ||
+        !io::read_one(in, edges) || !io::read_one(in, regions) || !io::read_one(in, partition_method)) {
         throw std::runtime_error("arcflags_io: truncated header");
     }
     if (magic != kArcFlagsMagic) {
@@ -130,16 +112,8 @@ ArcFlagsPreprocessedData load_arc_flags(const std::string &path) {
     data.partition_method = loaded_partition_method(partition_method);
     data.region_of.resize(memory_size(vertices));
     data.forward_flags.resize(memory_size(edges));
-    in.read(reinterpret_cast<char *>(data.region_of.data()),
-            static_cast<std::streamsize>(data.region_of.size() * sizeof(uint16_t)));
-    if (!in) {
-        throw std::runtime_error("arcflags_io: truncated region array");
-    }
-    in.read(reinterpret_cast<char *>(data.forward_flags.data()),
-            static_cast<std::streamsize>(data.forward_flags.size() * sizeof(uint64_t)));
-    if (!in) {
-        throw std::runtime_error("arcflags_io: truncated flag array");
-    }
+    io::read_span(in, std::span<uint16_t>(data.region_of), "arcflags_io: truncated region array");
+    io::read_span(in, std::span<uint64_t>(data.forward_flags), "arcflags_io: truncated flag array");
 
     validate_data(data);
     return data;

@@ -193,11 +193,7 @@ ContractionHierarchyAlgorithm::ContractionHierarchyAlgorithm(const Graph &graph)
 
 ContractionHierarchyAlgorithm::ContractionHierarchyAlgorithm(const Graph &graph, ContractionHierarchy &&ch)
     : graph_(graph), ch_(std::move(ch)), preprocessed_(true), forward_dist_(graph.vertex_count(), kUnreachable),
-      backward_dist_(graph.vertex_count(), kUnreachable) {
-    if (ch_.vertex_count() != graph.vertex_count()) {
-        throw std::invalid_argument("ch: loaded hierarchy vertex count does not match graph");
-    }
-}
+      backward_dist_(graph.vertex_count(), kUnreachable) {}
 
 std::string_view ContractionHierarchyAlgorithm::name() const { return "ch"; }
 

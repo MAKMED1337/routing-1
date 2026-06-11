@@ -1,5 +1,5 @@
 #include "algorithms/routing_instance.hpp"
-#include "graph/graph_io.hpp"
+#include "io/graph_io.hpp"
 #include "routing/routing.hpp"
 
 #include <CLI/CLI.hpp>
@@ -16,10 +16,6 @@ int main(int argc, char **argv) {
     transport::VertexId source = 0;
     transport::VertexId target = 0;
     std::string algo = "dijkstra";
-    std::string ch_load_path;
-    std::string ch_save_path;
-    std::string arcflags_load_path;
-    std::string arcflags_save_path;
     transport::RoutingPreprocessingContext preprocessing_context;
 
     CLI::App app{"Run a shortest-path query against a binary graph"};
@@ -28,29 +24,17 @@ int main(int argc, char **argv) {
     app.add_option("--source", source, "Source vertex id")->required();
     app.add_option("--target", target, "Target vertex id")->required();
     app.add_option("--algorithm", algo, "Routing algorithm name")->default_val("dijkstra");
-    app.add_option("--ch-load", ch_load_path, "Load a precomputed CH artifact")->check(CLI::ExistingFile);
-    app.add_option("--ch-save", ch_save_path, "Save a computed CH artifact");
-    app.add_option("--arcflags-load", arcflags_load_path, "Load a precomputed ArcFlags artifact")
+    app.add_option("--ch-load", preprocessing_context.ch_load_path, "Load a precomputed CH artifact")
         ->check(CLI::ExistingFile);
-    app.add_option("--arcflags-save", arcflags_save_path, "Save a computed ArcFlags artifact");
+    app.add_option("--ch-save", preprocessing_context.ch_save_path, "Save a computed CH artifact");
+    app.add_option("--arcflags-load", preprocessing_context.arcflags_load_path, "Load a precomputed ArcFlags artifact")
+        ->check(CLI::ExistingFile);
+    app.add_option("--arcflags-save", preprocessing_context.arcflags_save_path, "Save a computed ArcFlags artifact");
 
     try {
         app.parse(argc, argv);
     } catch (const CLI::ParseError &err) {
         return app.exit(err);
-    }
-
-    if (!ch_load_path.empty()) {
-        preprocessing_context.ch_load_path = ch_load_path;
-    }
-    if (!ch_save_path.empty()) {
-        preprocessing_context.ch_save_path = ch_save_path;
-    }
-    if (!arcflags_load_path.empty()) {
-        preprocessing_context.arcflags_load_path = arcflags_load_path;
-    }
-    if (!arcflags_save_path.empty()) {
-        preprocessing_context.arcflags_save_path = arcflags_save_path;
     }
 
     const transport::Graph graph = transport::load_graph_binary(graph_path);

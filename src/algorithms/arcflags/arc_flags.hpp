@@ -57,8 +57,10 @@ private:
     std::vector<uint16_t> region_of_;
     std::vector<uint64_t> forward_flags_;
     mutable StampedVector<Distance> dist_;
-
-    void compute_flags(const std::vector<std::vector<VertexId>> &boundary_by_region);
 };
+
+[[nodiscard]] ArcFlagsPreprocessedData build_arc_flags(const Graph &graph, PhastAlgorithm &phast, uint16_t regions,
+                                                       PartitionMethod partition_method, uint32_t threads,
+                                                       std::span<const NodeCoord> coords = {});
 
 } // namespace transport

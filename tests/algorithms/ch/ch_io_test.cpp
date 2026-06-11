@@ -1,6 +1,6 @@
-#include "algorithms/ch/ch_io.hpp"
 #include "algorithms/ch/contraction_hierarchy.hpp"
 #include "graph_fixtures.hpp"
+#include "io/ch_io.hpp"
 #include "routing_test_utils.hpp"
 
 #include <cstdint>
