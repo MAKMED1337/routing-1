@@ -9,10 +9,18 @@
 #include "graph/types.hpp"
 
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <vector>
 
 namespace transport {
+
+struct ArcFlagsPreprocessedData {
+    uint16_t regions = 0;
+    PartitionMethod partition_method = PartitionMethod::Grid;
+    std::vector<uint16_t> region_of;
+    std::vector<uint64_t> forward_flags;
+};
 
 // Arc-flags shortest-path algorithm.
 // graph is the original road graph used for boundary detection, flag computation, and querying.
@@ -25,20 +33,21 @@ namespace transport {
 // build CH/PHAST itself.
 class ArcFlagsAlgorithm final : public RoutingAlgorithm {
 public:
-    // Caller contract: `phast` must have been built from `graph` (same vertex set/ids). The
-    // constructor does not check this; a mismatched PHAST silently produces out-of-bounds reads
-    // or wrong routes.
     explicit ArcFlagsAlgorithm(const Graph &graph, PhastAlgorithm &&phast, uint16_t regions = 32,
                                PartitionMethod partition_method = PartitionMethod::Inertial, uint32_t threads = 1,
                                std::span<const NodeCoord> coords = {});
+    explicit ArcFlagsAlgorithm(const Graph &graph, ArcFlagsPreprocessedData &&data);
 
     std::string_view name() const override;
     void preprocess() override;
     [[nodiscard]] PathResult query(VertexId source, VertexId target) const override;
+    [[nodiscard]] bool is_preprocessed() const { return preprocessed_; }
+    void load_preprocessed(ArcFlagsPreprocessedData &&data);
+    [[nodiscard]] ArcFlagsPreprocessedData export_preprocessed() const;
 
 private:
     const Graph &graph_;
-    PhastAlgorithm phast_;
+    std::optional<PhastAlgorithm> phast_;
     uint16_t regions_;
     PartitionMethod partition_method_;
     uint32_t threads_;
@@ -48,8 +57,10 @@ private:
     std::vector<uint16_t> region_of_;
     std::vector<uint64_t> forward_flags_;
     mutable StampedVector<Distance> dist_;
-
-    void compute_flags(const std::vector<std::vector<VertexId>> &boundary_by_region);
 };
+
+[[nodiscard]] ArcFlagsPreprocessedData build_arc_flags(const Graph &graph, PhastAlgorithm &phast, uint16_t regions,
+                                                       PartitionMethod partition_method, uint32_t threads,
+                                                       std::span<const NodeCoord> coords = {});
 
 } // namespace transport

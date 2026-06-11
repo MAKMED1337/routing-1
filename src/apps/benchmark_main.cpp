@@ -2,7 +2,7 @@
 #include "algorithms/routing_algorithm.hpp"
 #include "algorithms/routing_instance.hpp"
 #include "apps/bench_utils.hpp"
-#include "graph/graph_io.hpp"
+#include "io/graph_io.hpp"
 #include "routing/routing.hpp"
 
 #include <CLI/CLI.hpp>
@@ -16,6 +16,7 @@
 #include <numeric>
 #include <optional>
 #include <random>
+#include <set>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -59,6 +60,18 @@ bench::Json preprocess_to_json(const PreprocessReport &report, const RoutingAlgo
     j["after_algorithm_peak_rss_mb"] = report.algorithm.process_peak_rss_mb;
     if (const auto *ch = dynamic_cast<const ContractionHierarchyAlgorithm *>(&algorithm)) {
         j["auxiliary_edges"] = ch->auxiliary_edge_count();
+    }
+    if (report.ch_loaded_from) {
+        j["ch_loaded_from"] = *report.ch_loaded_from;
+    }
+    if (report.ch_saved_to) {
+        j["ch_saved_to"] = *report.ch_saved_to;
+    }
+    if (report.arcflags_loaded_from) {
+        j["arcflags_loaded_from"] = *report.arcflags_loaded_from;
+    }
+    if (report.arcflags_saved_to) {
+        j["arcflags_saved_to"] = *report.arcflags_saved_to;
     }
     return j;
 }
@@ -148,6 +161,8 @@ int main(int argc, char **argv) {
     uint32_t min_settled = 100'000;
     uint32_t max_settled = 1'000'000;
     uint32_t seed = 1;
+    transport::RoutingPreprocessingContext context_a;
+    transport::RoutingPreprocessingContext context_b;
 
     CLI::App app{"Compare two routing algorithms on sampled graph queries"};
     app.add_option("--graph", graph_path, "Path to graph binary")->required()->check(CLI::ExistingFile);
@@ -162,6 +177,22 @@ int main(int argc, char **argv) {
     app.add_option("--seed", seed, "Random seed")->default_val(1);
     app.add_option("--algorithm-a", algorithm_a, "First routing algorithm")->default_val("dijkstra");
     app.add_option("--algorithm-b", algorithm_b, "Second routing algorithm")->default_val("ch");
+    app.add_option("--algorithm-a-ch-load", context_a.ch_load_path, "Load CH artifact for algorithm A")
+        ->check(CLI::ExistingFile);
+    app.add_option("--algorithm-a-ch-save", context_a.ch_save_path, "Save CH artifact for algorithm A");
+    app.add_option("--algorithm-a-arcflags-load", context_a.arcflags_load_path,
+                   "Load ArcFlags artifact for algorithm A")
+        ->check(CLI::ExistingFile);
+    app.add_option("--algorithm-a-arcflags-save", context_a.arcflags_save_path,
+                   "Save ArcFlags artifact for algorithm A");
+    app.add_option("--algorithm-b-ch-load", context_b.ch_load_path, "Load CH artifact for algorithm B")
+        ->check(CLI::ExistingFile);
+    app.add_option("--algorithm-b-ch-save", context_b.ch_save_path, "Save CH artifact for algorithm B");
+    app.add_option("--algorithm-b-arcflags-load", context_b.arcflags_load_path,
+                   "Load ArcFlags artifact for algorithm B")
+        ->check(CLI::ExistingFile);
+    app.add_option("--algorithm-b-arcflags-save", context_b.arcflags_save_path,
+                   "Save ArcFlags artifact for algorithm B");
 
     try {
         app.parse(argc, argv);
@@ -176,6 +207,24 @@ int main(int argc, char **argv) {
     if (min_settled > max_settled) {
         std::cerr << "--min-settled must be <= --max-settled\n";
         return 1;
+    }
+    std::set<std::string> artifact_save_paths;
+    for (const auto &path :
+         {context_a.ch_save_path, context_a.arcflags_save_path, context_b.ch_save_path, context_b.arcflags_save_path}) {
+        if (path && fs::exists(*path)) {
+            std::cerr << "artifact output file already exists: " << *path << "\n";
+            return 1;
+        }
+        if (path) {
+            if (!artifact_save_paths.insert(*path).second) {
+                std::cerr << "duplicate artifact output path: " << *path << "\n";
+                return 1;
+            }
+            const fs::path artifact_path(*path);
+            if (artifact_path.has_parent_path()) {
+                fs::create_directories(artifact_path.parent_path());
+            }
+        }
     }
 
     const Graph graph = transport::load_graph_binary(graph_path);
@@ -193,8 +242,8 @@ int main(int argc, char **argv) {
     std::optional<RoutingInstance> instance_a;
     std::optional<RoutingInstance> instance_b;
     try {
-        instance_a.emplace(transport::make_routing_instance(algorithm_a, graph, coords));
-        instance_b.emplace(transport::make_routing_instance(algorithm_b, graph, coords));
+        instance_a.emplace(transport::make_routing_instance(algorithm_a, graph, coords, context_a));
+        instance_b.emplace(transport::make_routing_instance(algorithm_b, graph, coords, context_b));
     } catch (const std::exception &err) {
         std::cerr << err.what() << "\n";
         return 1;

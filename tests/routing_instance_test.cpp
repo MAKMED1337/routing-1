@@ -3,6 +3,7 @@
 #include "routing_test_utils.hpp"
 
 #include <chrono>
+#include <filesystem>
 #include <iostream>
 #include <stdexcept>
 #include <vector>
@@ -81,6 +82,50 @@ bool check_dependency_preprocessing_runs_for_ch_dependent_algorithms() {
     return true;
 }
 
+bool check_ch_artifact_context_round_trip() {
+    const transport::Graph graph = transport::test::make_line_graph();
+    const std::filesystem::path path = std::filesystem::temp_directory_path() / "transport_context_ch.ch";
+    std::filesystem::remove(path);
+
+    transport::RoutingPreprocessingContext save_context;
+    save_context.ch_save_path = path.string();
+    transport::RoutingInstance saved = transport::make_routing_instance("ch", graph, {}, save_context);
+    if (!std::filesystem::exists(path)) {
+        std::cerr << "instance: expected CH artifact to be saved\n";
+        return false;
+    }
+
+    transport::RoutingPreprocessingContext load_context;
+    load_context.ch_load_path = path.string();
+    transport::RoutingInstance loaded = transport::make_routing_instance("ch", graph, {}, load_context);
+    std::filesystem::remove(path);
+
+    return check_all_pairs(graph, *saved.algorithm, "saved ch") &&
+           check_all_pairs(graph, *loaded.algorithm, "loaded ch");
+}
+
+bool check_arcflags_artifact_context_round_trip() {
+    const auto [graph, coords] = transport::test::make_grid_graph(3, 3);
+    const std::filesystem::path path = std::filesystem::temp_directory_path() / "transport_context_arcflags.af";
+    std::filesystem::remove(path);
+
+    transport::RoutingPreprocessingContext save_context;
+    save_context.arcflags_save_path = path.string();
+    transport::RoutingInstance saved = transport::make_routing_instance("arcflags", graph, coords, save_context);
+    if (!std::filesystem::exists(path)) {
+        std::cerr << "instance: expected ArcFlags artifact to be saved\n";
+        return false;
+    }
+
+    transport::RoutingPreprocessingContext load_context;
+    load_context.arcflags_load_path = path.string();
+    transport::RoutingInstance loaded = transport::make_routing_instance("arcflags", graph, {}, load_context);
+    std::filesystem::remove(path);
+
+    return check_all_pairs(graph, *saved.algorithm, "saved arcflags") &&
+           check_all_pairs(graph, *loaded.algorithm, "loaded arcflags");
+}
+
 } // namespace
 
 int main() {
@@ -90,6 +135,8 @@ int main() {
     ok &= check_graph_only_algorithms_need_no_coords();
     ok &= check_unsupported_algorithm_throws();
     ok &= check_dependency_preprocessing_runs_for_ch_dependent_algorithms();
+    ok &= check_ch_artifact_context_round_trip();
+    ok &= check_arcflags_artifact_context_round_trip();
     if (!ok) {
         std::cerr << "routing instance tests FAILED\n";
         return 1;

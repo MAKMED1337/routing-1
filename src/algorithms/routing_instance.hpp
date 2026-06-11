@@ -6,6 +6,7 @@
 #include "graph/graph.hpp"
 
 #include <chrono>
+#include <filesystem>
 #include <memory>
 #include <optional>
 #include <span>
@@ -35,6 +36,10 @@ struct AlgorithmPreprocessStats {
 struct PreprocessReport {
     DependencyPreprocessStats dependency;
     AlgorithmPreprocessStats algorithm;
+    std::optional<std::string> ch_loaded_from;
+    std::optional<std::string> ch_saved_to;
+    std::optional<std::string> arcflags_loaded_from;
+    std::optional<std::string> arcflags_saved_to;
 };
 
 // Bundle returned by make_routing_instance(): the constructed, already-preprocessed algorithm
@@ -45,10 +50,20 @@ struct RoutingInstance {
     PreprocessReport stats;
 };
 
+struct RoutingPreprocessingContext {
+    std::optional<std::filesystem::path> ch_load_path;
+    std::optional<std::filesystem::path> ch_save_path;
+    std::optional<std::filesystem::path> arcflags_load_path;
+    std::optional<std::filesystem::path> arcflags_save_path;
+};
+
 // Validates `name`/`coords`, builds any CH/PHAST dependency the algorithm needs, constructs the
 // algorithm (moving the dependency in), and runs its preprocess(). Returns the algorithm ready to
 // query, along with a timing/RSS breakdown of the dependency vs. algorithm preprocessing phases.
 [[nodiscard]] RoutingInstance make_routing_instance(const std::string &name, const Graph &graph,
                                                     std::span<const NodeCoord> coords = {});
+[[nodiscard]] RoutingInstance make_routing_instance(const std::string &name, const Graph &graph,
+                                                    std::span<const NodeCoord> coords,
+                                                    const RoutingPreprocessingContext &context);
 
 } // namespace transport

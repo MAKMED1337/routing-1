@@ -42,6 +42,8 @@ struct ContractionHierarchyBuildResult {
 class ContractionHierarchyAlgorithm final : public RoutingAlgorithm {
 public:
     explicit ContractionHierarchyAlgorithm(const Graph &graph);
+    // Caller contract: `ch` must have been built for `graph`'s exact vertex id space.
+    explicit ContractionHierarchyAlgorithm(const Graph &graph, ContractionHierarchy &&ch);
 
     [[nodiscard]] std::string_view name() const override;
     void preprocess() override;

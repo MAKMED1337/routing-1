@@ -1,4 +1,4 @@
-#include "graph/graph_io.hpp"
+#include "io/graph_io.hpp"
 
 #include <CLI/CLI.hpp>
 
