@@ -9,3 +9,12 @@ reports/
 *_handout.pdf
 handout*.pdf
 handouts/
+
+# LaTeX build artifacts (PDF is kept)
+LaTex/*.aux
+LaTex/*.fdb_latexmk
+LaTex/*.fls
+LaTex/*.log
+LaTex/*.out
+LaTex/*.synctex.gz
+LaTex/*.toc

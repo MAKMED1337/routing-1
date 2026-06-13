@@ -20,8 +20,8 @@ namespace transport {
 
 namespace {
 // Backward Dijkstras batched per forward sweep. Larger values reduce sweep count but raise
-// peak memory proportionally (V * kBatchSize * sizeof(Distance) bytes per work item).
-constexpr size_t kBatchSize = 8;
+// peak memory proportionally (V * kBatchSize * sizeof(Distance) bytes per thread).
+constexpr size_t kBatchSize = 1;
 
 void validate_arcflags_parameters(uint16_t regions, PartitionMethod partition_method, uint32_t threads) {
     if (regions == 0 || regions > 64) {

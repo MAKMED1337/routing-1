@@ -95,7 +95,10 @@ void PhastAlgorithm::all_to_one_batch(std::span<const VertexId> targets, std::ve
     }
 
     // dist_rank layout: rank-major, lane-minor — dist_rank[r * B + lane].
-    std::vector<Distance> dist_rank(V * B, kUnreachable);
+    // thread_local so the allocation is reused across batches on the same thread,
+    // avoiding repeated 500+ MB malloc/free under multi-threaded preprocessing.
+    thread_local std::vector<Distance> dist_rank;
+    dist_rank.assign(V * B, kUnreachable);
 
     // Phase 1: B independent backward upward Dijkstras, one per target lane.
     for (size_t lane = 0; lane < B; ++lane) {

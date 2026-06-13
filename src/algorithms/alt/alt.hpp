@@ -14,10 +14,11 @@ namespace transport {
 
 class AltAlgorithm final : public RoutingAlgorithm {
 public:
-    explicit AltAlgorithm(const Graph &graph);
+    // landmarks must be pre-built (e.g. via alt::build_landmarks); preprocess() is a no-op.
     AltAlgorithm(const Graph &graph, alt::LandmarkSet landmarks, uint32_t active_landmarks);
 
     [[nodiscard]] std::string_view name() const override;
+    void preprocess() override;
     [[nodiscard]] PathResult query(VertexId source, VertexId target) const override;
 
     [[nodiscard]] uint64_t landmark_table_bytes() const;

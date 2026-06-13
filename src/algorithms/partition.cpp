@@ -11,7 +11,11 @@
 #include <vector>
 
 #ifdef TRANSPORT_HAVE_KAMINPAR
+#if __has_include(<kaminpar.h>)
+#include <kaminpar.h>
+#else
 #include <kaminpar-shm/kaminpar.h>
+#endif
 #endif
 
 namespace transport {
@@ -120,10 +124,11 @@ std::vector<uint16_t> partition_kaminpar(const Graph &graph, uint16_t regions) {
     xadj[V] = static_cast<EdgeID>(adjncy.size());
 
     KaMinPar km(1, create_default_context());
-    km.set_graph(static_cast<NodeID>(V), xadj.data(), adjncy.data(), nullptr, nullptr);
+    km.set_output_level(OutputLevel::QUIET);
+    km.copy_graph(xadj, adjncy);
 
     std::vector<BlockID> part(V);
-    km.compute_partition(static_cast<BlockID>(regions), part.data());
+    km.compute_partition(static_cast<BlockID>(regions), part);
 
     std::vector<uint16_t> result(V);
     for (VertexId v = 0; v < V; ++v) {

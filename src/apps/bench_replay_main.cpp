@@ -1,4 +1,5 @@
 #include "algorithms/ch/contraction_hierarchy.hpp"
+#include "algorithms/partition.hpp"
 #include "algorithms/routing_instance.hpp"
 #include "apps/bench_utils.hpp"
 #include "io/graph_io.hpp"
@@ -22,6 +23,8 @@ namespace fs = std::filesystem;
 using transport::ContractionHierarchyAlgorithm;
 using transport::Distance;
 using transport::Graph;
+using transport::InjectedArcFlags;
+using transport::InjectedLandmarks;
 using transport::PreprocessReport;
 using transport::RoutingAlgorithm;
 using transport::RoutingInstance;
@@ -31,6 +34,19 @@ using transport::to_seconds;
 using transport::VertexId;
 
 namespace {
+
+transport::alt::LandmarkStrategy parse_alt_landmark_strategy(std::string_view strategy) {
+    if (strategy == "random") {
+        return transport::alt::LandmarkStrategy::Random;
+    }
+    if (strategy == "farthest") {
+        return transport::alt::LandmarkStrategy::Farthest;
+    }
+    if (strategy == "planar") {
+        return transport::alt::LandmarkStrategy::Planar;
+    }
+    throw std::invalid_argument("unsupported ALT landmark strategy: " + std::string(strategy));
+}
 
 bench::Json preprocess_to_json(const PreprocessReport &report, const RoutingAlgorithm &algorithm) {
     bench::Json j;
@@ -122,6 +138,10 @@ int main(int argc, char **argv) {
     std::string algorithm_name;
     std::string variant;
     RoutingPreprocessingContext context;
+    InjectedArcFlags arcflags_opts;
+    InjectedLandmarks landmark_opts;
+    std::string arcflags_partition_str;
+    std::string alt_landmark_strategy_str;
 
     CLI::App app{"Replay saved query pairs against one routing algorithm.\n"
                  "Loads a single algorithm per process for clean RSS accounting.\n"
@@ -140,9 +160,30 @@ int main(int argc, char **argv) {
     app.add_option("--out", out_path, "Output JSON path for benchmark results")->required();
     app.add_option("--ch-load", context.ch_load_path, "Load CH artifact from this path")->check(CLI::ExistingFile);
     app.add_option("--ch-save", context.ch_save_path, "Save CH artifact to this path");
-    app.add_option("--arcflags-load", context.arcflags_load_path, "Load ArcFlags artifact from this path")
+    app.add_option("--arcflags-load", arcflags_opts.load_path, "Load ArcFlags artifact from this path")
         ->check(CLI::ExistingFile);
-    app.add_option("--arcflags-save", context.arcflags_save_path, "Save ArcFlags artifact to this path");
+    app.add_option("--arcflags-save", arcflags_opts.save_path, "Save ArcFlags artifact to this path");
+    app.add_option("--hl-label-fraction", context.hl_label_fraction,
+                   "Hub Labels: fraction of top-ranked CH vertices to label (0 < f <= 1; default 0.25)")
+        ->check(CLI::Range(0.0, 1.0));
+    app.add_option("--memory-budget-gb", context.memory_budget_gb,
+                   "Memory budget in GiB before throwing (default 18; currently used by HL)")
+        ->check(CLI::PositiveNumber);
+    app.add_option("--arcflags-regions", arcflags_opts.regions, "Arc Flags: number of regions [1,64] (default 32)")
+        ->check(CLI::Range(1u, 64u));
+    app.add_option("--arcflags-partition", arcflags_partition_str,
+                   "Arc Flags: partition method: grid|inertial|kaminpar (default inertial)")
+        ->check(CLI::IsMember({"grid", "inertial", "kaminpar"}));
+    app.add_option("--arcflags-threads", arcflags_opts.threads, "Arc Flags: preprocessing thread count (default 1)")
+        ->check(CLI::PositiveNumber);
+    app.add_option("--alt-landmark-strategy", alt_landmark_strategy_str,
+                   "ALT: landmark strategy: random|farthest|planar (default farthest)")
+        ->check(CLI::IsMember({"random", "farthest", "planar"}));
+    app.add_option("--alt-landmarks", landmark_opts.count, "ALT: total landmark count (default 16)")
+        ->check(CLI::PositiveNumber);
+    app.add_option("--alt-active-landmarks", landmark_opts.active,
+                   "ALT: active landmarks selected per query (default 4)")
+        ->check(CLI::PositiveNumber);
 
     try {
         app.parse(argc, argv);
@@ -150,7 +191,33 @@ int main(int argc, char **argv) {
         return app.exit(err);
     }
 
-    for (const auto &save_path : {context.ch_save_path, context.arcflags_save_path}) {
+    if (!arcflags_partition_str.empty()) {
+        try {
+            arcflags_opts.partition = transport::parse_partition_method(arcflags_partition_str);
+        } catch (const std::exception &err) {
+            std::cerr << err.what() << "\n";
+            return 1;
+        }
+    }
+    if (!alt_landmark_strategy_str.empty()) {
+        try {
+            landmark_opts.strategy = parse_alt_landmark_strategy(alt_landmark_strategy_str);
+        } catch (const std::exception &err) {
+            std::cerr << err.what() << "\n";
+            return 1;
+        }
+    }
+
+    if (arcflags_opts.load_path || arcflags_opts.save_path || arcflags_opts.regions || arcflags_opts.partition ||
+        arcflags_opts.threads) {
+        context.arcflags = std::move(arcflags_opts);
+    }
+    if (landmark_opts.strategy || landmark_opts.count || landmark_opts.active) {
+        context.landmarks = std::move(landmark_opts);
+    }
+
+    const auto arcflags_save_path = context.arcflags ? context.arcflags->save_path : std::nullopt;
+    for (const auto &save_path : {context.ch_save_path, arcflags_save_path}) {
         if (save_path && fs::exists(*save_path)) {
             std::cerr << "artifact output file already exists: " << save_path->string() << "\n";
             return 1;
@@ -158,7 +225,7 @@ int main(int argc, char **argv) {
     }
     {
         std::set<std::string> seen;
-        for (const auto &sp : {context.ch_save_path, context.arcflags_save_path}) {
+        for (const auto &sp : {context.ch_save_path, arcflags_save_path}) {
             if (sp && !seen.insert(sp->string()).second) {
                 std::cerr << "duplicate artifact output path: " << sp->string() << "\n";
                 return 1;
