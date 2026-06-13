@@ -1,0 +1,50 @@
+{
+  "algorithm": "dijkstra",
+  "variant": "default",
+  "date": "2026-06-13T05:19:02",
+  "graph": {
+    "path": "data/graph/europe-driving-20260613.graph",
+    "vertices": 370316072,
+    "directed_edges": 731016367
+  },
+  "query_set": "queries/europe_ranged_q1000_s1.json",
+  "distance_scale": 1000,
+  "load_wall_s": 15.435136649,
+  "load_cpu_s": 13.205828267,
+  "after_load_peak_rss_mb": 13983.828125,
+  "preprocessing": {
+    "dependency_wall_s": 0.0,
+    "dependency_cpu_s": 0.0,
+    "after_dependency_peak_rss_mb": 0.0,
+    "algorithm_wall_s": 8.99e-06,
+    "algorithm_cpu_s": 7.81e-06,
+    "after_algorithm_peak_rss_mb": 18221.578125
+  },
+  "query_set_filters": {
+    "min_settled": 100000,
+    "max_settled": 1000000
+  },
+  "queries": {
+    "mean_wall_us": 63905.138615,
+    "p50_wall_us": 61885.285,
+    "p95_wall_us": 122901.016,
+    "p99_wall_us": 146320.324,
+    "max_wall_us": 179674.966,
+    "mean_cpu_us": 63588.52397,
+    "p50_cpu_us": 61586.34,
+    "p95_cpu_us": 122289.11,
+    "p99_cpu_us": 145624.59,
+    "max_cpu_us": 178793.669,
+    "mean_settled": 557312.456,
+    "p50_settled": 565036.0,
+    "p95_settled": 950932.0,
+    "mean_relaxed_arcs": 1099961.251,
+    "mean_heap_pushes": 564223.924,
+    "mean_heuristic_evals": 0.0,
+    "mean_pruned_by_flag": 0.0,
+    "count": 1000,
+    "seed": 1,
+    "distance_validated": true,
+    "distance_mismatches": 0
+  }
+}

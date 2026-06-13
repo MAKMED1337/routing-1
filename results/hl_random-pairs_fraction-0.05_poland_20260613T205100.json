@@ -1,0 +1,47 @@
+{
+  "algorithm": "hl",
+  "variant": "random-pairs-label_fraction=0.05",
+  "date": "2026-06-13T21:25:35",
+  "graph": {
+    "path": "data/graph/poland-driving-20260613.graph",
+    "source": "data/raw/poland-20260613.osm.pbf",
+    "vertices": 17058998,
+    "directed_edges": 33674745
+  },
+  "query_set": "queries/poland_random_q1000_s2.json",
+  "distance_scale": 1000,
+  "load_wall_s": 0.341561091,
+  "load_cpu_s": 0.33901408,
+  "after_load_peak_rss_mb": 651.90625,
+  "preprocessing": {
+    "dependency_wall_s": 1.804982096,
+    "dependency_cpu_s": 1.795978179,
+    "after_dependency_peak_rss_mb": 2238.3203125,
+    "algorithm_wall_s": 373.414566586,
+    "algorithm_cpu_s": 371.445161485,
+    "after_algorithm_peak_rss_mb": 24817.7109375,
+    "ch_loaded_from": "data/graph/poland-ch.bin"
+  },
+  "queries": {
+    "mean_wall_us": 71.11492,
+    "p50_wall_us": 72.3,
+    "p95_wall_us": 100.4,
+    "p99_wall_us": 112.111,
+    "max_wall_us": 156.611,
+    "mean_cpu_us": 70.786,
+    "p50_cpu_us": 71.78,
+    "p95_cpu_us": 99.43,
+    "p99_cpu_us": 111.48,
+    "max_cpu_us": 156.66,
+    "mean_settled": 17.453,
+    "p50_settled": 16.0,
+    "p95_settled": 32.0,
+    "mean_relaxed_arcs": 0.0,
+    "mean_heap_pushes": 0.0,
+    "mean_heuristic_evals": 0.0,
+    "mean_pruned_by_flag": 0.0,
+    "count": 1000,
+    "seed": 2,
+    "distance_validated": false
+  }
+}

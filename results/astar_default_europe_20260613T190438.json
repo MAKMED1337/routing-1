@@ -1,0 +1,51 @@
+{
+  "algorithm": "astar",
+  "variant": "default",
+  "date": "2026-06-13T19:05:41",
+  "graph": {
+    "path": "data/graph/europe-driving-20260613.graph",
+    "source": "data/raw/europe-20260613.osm.pbf",
+    "vertices": 370316072,
+    "directed_edges": 731016367
+  },
+  "query_set": "queries/europe_ranged_q1000_s1.json",
+  "distance_scale": 1000,
+  "load_wall_s": 16.367607283,
+  "load_cpu_s": 13.242000638,
+  "after_load_peak_rss_mb": 13984.0546875,
+  "preprocessing": {
+    "dependency_wall_s": 0.0,
+    "dependency_cpu_s": 0.0,
+    "after_dependency_peak_rss_mb": 0.0,
+    "algorithm_wall_s": 2.85e-06,
+    "algorithm_cpu_s": 1.56e-06,
+    "after_algorithm_peak_rss_mb": 23872.5546875
+  },
+  "query_set_filters": {
+    "min_settled": 100000,
+    "max_settled": 1000000
+  },
+  "queries": {
+    "mean_wall_us": 25128.863305,
+    "p50_wall_us": 20098.082,
+    "p95_wall_us": 63040.344,
+    "p99_wall_us": 93098.156,
+    "max_wall_us": 196793.104,
+    "mean_cpu_us": 25001.485925999998,
+    "p50_cpu_us": 19993.06,
+    "p95_cpu_us": 62695.53,
+    "p99_cpu_us": 92645.85,
+    "max_cpu_us": 195846.7,
+    "mean_settled": 100146.706,
+    "p50_settled": 81205.0,
+    "p95_settled": 251963.0,
+    "mean_relaxed_arcs": 197124.886,
+    "mean_heap_pushes": 102369.631,
+    "mean_heuristic_evals": 204431.161,
+    "mean_pruned_by_flag": 0.0,
+    "count": 1000,
+    "seed": 1,
+    "distance_validated": true,
+    "distance_mismatches": 0
+  }
+}

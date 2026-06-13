@@ -1,0 +1,80 @@
+{
+  "algorithm_a": "dijkstra",
+  "algorithm_b": "alt",
+  "date": "2026-06-13T01:16:38",
+  "graph": {
+    "path": "data/graph/poland-driving-20260613.graph",
+    "source": "data/raw/poland-20260613.osm.pbf",
+    "vertices": 17058998,
+    "directed_edges": 33674745
+  },
+  "distance_scale": 1000,
+  "after_load_peak_rss_mb": 648.328125,
+  "filters": {
+    "min_settled": 100000,
+    "max_settled": 1000000
+  },
+  "preprocessing": {
+    "algorithm_a": {
+      "dependency_wall_s": 0.0,
+      "dependency_cpu_s": 0.0,
+      "after_dependency_peak_rss_mb": 0.0,
+      "algorithm_wall_s": 3.94e-06,
+      "algorithm_cpu_s": 1.49e-06,
+      "after_algorithm_peak_rss_mb": 1103.91796875
+    },
+    "algorithm_b": {
+      "dependency_wall_s": 0.0,
+      "dependency_cpu_s": 0.0,
+      "after_dependency_peak_rss_mb": 0.0,
+      "algorithm_wall_s": 2.82e-06,
+      "algorithm_cpu_s": 1.42e-06,
+      "after_algorithm_peak_rss_mb": 6042.58203125
+    },
+    "rss_note": "after_*_peak_rss_mb values are process-wide high-water marks; algorithm_b RSS includes algorithm_a's retained memory"
+  },
+  "queries": {
+    "requested": 10,
+    "accepted": 10,
+    "attempted": 155,
+    "seed": 1,
+    "algorithm_a": {
+      "mean_wall_us": 42645.2755,
+      "p50_wall_us": 51581.758,
+      "p95_wall_us": 88807.042,
+      "p99_wall_us": 88807.042,
+      "max_wall_us": 88807.042,
+      "mean_cpu_us": 42429.842,
+      "p50_cpu_us": 51324.79,
+      "p95_cpu_us": 88360.77,
+      "p99_cpu_us": 88360.77,
+      "max_cpu_us": 88360.77,
+      "mean_settled": 458187.0,
+      "p50_settled": 542474.0,
+      "p95_settled": 928262.0,
+      "mean_relaxed_arcs": 903432.4,
+      "mean_heap_pushes": 463783.7,
+      "mean_heuristic_evals": 0.0,
+      "mean_pruned_by_flag": 0.0
+    },
+    "algorithm_b": {
+      "mean_wall_us": 25412.033499999998,
+      "p50_wall_us": 25125.037,
+      "p95_wall_us": 65852.922,
+      "p99_wall_us": 65852.922,
+      "max_wall_us": 65852.922,
+      "mean_cpu_us": 25269.5389,
+      "p50_cpu_us": 25008.83,
+      "p95_cpu_us": 65522.29,
+      "p99_cpu_us": 65522.29,
+      "max_cpu_us": 65522.29,
+      "mean_settled": 169456.2,
+      "p50_settled": 164347.0,
+      "p95_settled": 425159.0,
+      "mean_relaxed_arcs": 334292.2,
+      "mean_heap_pushes": 173077.9,
+      "mean_heuristic_evals": 345887.6,
+      "mean_pruned_by_flag": 0.0
+    }
+  }
+}

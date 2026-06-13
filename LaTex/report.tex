@@ -1,0 +1,233 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{booktabs}
+\usepackage{microtype}
+\usepackage[colorlinks=true,linkcolor=black,urlcolor=blue]{hyperref}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{xcolor}
+\usepackage{caption}
+\usepackage{pifont}
+\usepackage{parskip}
+\usepackage{graphicx}
+\usepackage{textcomp}
+
+\title{\textbf{Handout 01}\\[0.3em]
+  \large Routing Algorithm Benchmarks --- Poland \& Europe}
+\author{Eduard Tykhoniuk}
+\date{2026-06-13}
+
+\begin{document}
+
+\maketitle
+\tableofcontents
+\newpage
+
+\section{Introduction}
+
+The practical goal of the work was to build a small C++ routing-algorithm
+library and benchmark its one-to-one shortest-path algorithms on real-world road
+graphs imported from Geofabrik OpenStreetMap extracts.  The code was generated
+by AI.  My role was to review pull requests, check that the implementations
+matched the algorithms described in the handouts.
+
+The main comparison uses the Poland graph, where all implemented algorithms fit
+within the intended memory limit.  The initial intend was to compare algorithms
+on the Europe graph, however, due to the lack of RAM, only some of the algorithms
+were tested, more detailed in the \hyperref[sec:europe]{Section~\ref*{sec:europe}}.
+
+All algorithms solve point-to-point shortest paths on directed weighted road
+graphs.  The objective minimizes driving distance.  The implementations compute
+only the shortest-path distance value; they do not reconstruct or output the
+actual sequence of vertices or edges on the path.  For imported OSM edges,
+the edge length is computed from the two endpoint coordinates using Haversine
+distance, scaled by 1000, rounded up with \texttt{ceil}, and stored as
+\texttt{uint32\_t}.  A* uses the same coordinate model as an admissible lower
+bound but rounds down with \texttt{floor}.  Integer arithmetic is faster than
+floating point and avoids floating-point nondeterminism.
+
+\section{Experimental Setup}
+\label{sec:setup}
+
+\begin{itemize}
+  \item CPU: AMD Ryzen 7 5700X, 8 cores / 16 threads, max boost 4.9\,GHz.
+  \item RAM: 31\,GiB physical, 99\,GiB swap.
+  \item Swap backing device: NVMe at 2.7\,GB/s.
+  \item OS: Linux 7.0.10-arch1-1.
+\end{itemize}
+
+The intended benchmark memory policy was a 24\,GiB RAM cap for algorithm-owned
+working sets.  Swap was avoided to prevent swap I/O from distorting benchmark
+timings.
+
+\begin{table}[h]
+\centering
+\caption{Graph statistics.}
+\begin{tabular}{lrrrl}
+  \toprule
+  \textbf{Graph} & \textbf{Vertices} & \textbf{Directed edges} & \textbf{File size} & \textbf{Source} \\
+  \midrule
+  Poland  & 17,058,998  & 33,674,745  & 675\,MB  & Geofabrik, extract 2026-05-27 \\
+  Europe  & 370,316,072 & 731,016,367 & 14.7\,GB & Geofabrik, extract 2026-05-27 \\
+  \bottomrule
+\end{tabular}
+\end{table}
+
+For the Europe extract, the node map did not fit in RAM, so a custom parser was
+written that processes the data across multiple files and merges them into a
+single graph.
+
+\subsection*{Query Methodology}
+
+Two query types were used.
+
+\textbf{Ranged-Dijkstra} forms the main comparison.  A Dijkstra run starts from a
+random source, settles up to $N_{\max}$ vertices, and samples the target from
+settled ranks $[N_{\min}, N_{\max}]$; this selects medium-distance routes and
+stores reference distances for validation.
+
+\begin{itemize}
+  \item Query count: 1\,000, seed~1
+  \item Settled range: $N_{\min}=10^5$, $N_{\max}=10^6$
+\end{itemize}
+
+\textbf{Random pairs} use uniformly random source--target pairs with no distance
+constraint and no stored reference distance.  They appear in a separate section.
+
+\begin{itemize}
+  \item Query count: 1\,000, seed~2
+\end{itemize}
+
+Each replay benchmark runs one algorithm per process.  CH-dependent algorithms
+load the prebuilt Poland CH artifact where possible, so dependency load/build
+time is reported separately from algorithm-specific preprocessing.
+
+\section{Used Algorithms}
+\label{sec:algorithms}
+
+The implemented algorithms used in the report are: Dijkstra, A*, ALT,
+Bidirectional Dijkstra, Bidirectional A*, Contraction Hierarchy (CH),
+Arc Flags, CHASE, and Hub Labels (HL).
+
+\begin{description}
+  \item[A* and Bidirectional A*]
+    Haversine lower bound:
+    $h(v,t)=\lfloor \mathrm{haversine\_m}(v,t)\times1000\rfloor$.
+
+  \item[ALT]
+    Main benchmark uses 16 farthest-point landmarks with fixed seed and 4 active
+    landmarks per query.  Table~\ref{tab:alt-strategy} compares farthest, random,
+    and planar selection strategies.
+
+  \item[Arc Flags]
+    Main row uses 32 Inertial regions and 16 preprocessing threads.  Flags are
+    stored in a 64-bit region mask, so unsupported region counts above 64 are
+    rejected rather than truncated.
+
+  \item[CHASE]
+    Uses 64 Inertial regions and a 5\% CH core fraction.
+
+  \item[Hub Labels]
+    \texttt{label\_fraction=0.05} due to high memory usage ($\approx$ 24 GiB peak).
+\end{description}
+
+\section{Poland Results}
+\label{sec:poland}
+
+All main Poland rows use 1\,000 ranged queries with seed~1.  The generated tables
+below are produced directly from result JSON files, and the exact filenames are
+listed at the end of the report.
+
+\input{tables_poland}
+
+\input{tables_arcflags_sweep}
+
+\input{tables_alt_strategy}
+
+Hub Labels is the fastest measured algorithm on Poland.  After HL, CH is the
+fastest full-coverage CH-family baseline in this implementation.  CHASE is close
+to CH but does not improve query time because CH already leaves a tiny search
+space for the extra flag checks to prune.
+
+The unfortunate result for Arc Flags is that substantial preprocessing produces
+only a slight query speedup.  Inertial partitioning is geometric rather than
+graph-aware, so many edges cross region boundaries and carry multiple region
+bits.  The 1-to-16 thread preprocessing change mostly exposes memory-bandwidth
+contention over large PHAST and flag arrays.
+
+\section{Random-Pair Queries}
+\label{sec:random-pairs}
+
+All Poland algorithms were also benchmarked on 1\,000 uniformly random
+source--target pairs (seed~2).  Random pairs do not carry stored reference
+distances, so results are timing-only.
+
+\input{tables_random_pairs}
+
+
+\section{Europe Results}
+\label{sec:europe}
+
+The Europe graph is large enough that memory behavior dominates the feasible
+benchmark set.  Dijkstra, A*, and Bidirectional Dijkstra were run; ALT, CH,
+Arc Flags, CHASE, Hub Labels, and Bidirectional A* exceed the intended RAM cap.
+
+\input{tables_europe}
+
+A* works well at this big scale because the Haversine heuristic is a very good approximation
+for long geographic routes.  It needs the graph, coordinate sidecar, and scratch
+arrays, but it does not need and preprocessing.  In contrast, ALT would
+need roughly 47\,GB for 16 forward/reverse landmark tables on 370\,M vertices,
+and CH-family preprocessing is far beyond the available RAM.
+
+\section{Discussion}
+\label{sec:discussion}
+
+The main comparison is useful but not a final best-possible performance study:
+the algorithms were implemented functionally and with attention to obvious hot
+paths, but not exhaustively optimized.  That caveat matters especially for
+Arc Flags and Hub Labels, where implementation details can strongly affect
+preprocessing memory and query latency.
+
+On Poland, CH and Hub Labels dominate query latency because their preprocessing
+compresses the search space.  A* is the best low-preprocessing option: it
+relies only on coordinates and scratch memory.  ALT improves over Dijkstra but
+pays a dense landmark-table cost.  Arc Flags benefits from a graph-aware
+partition: \href{https://github.com/KaHIP/KaMinPar}{KaMinPar}-64
+(Table~\ref{tab:arcflags-sweep}) improves over inertial partitioning.
+
+CH class family of algorithms worked very well, as they greatly compressed the number of vertices
+in the optimal path.
+This also may be confirmed by the fact, that speedup is higher on completely random pairs as the search space
+does not rely on the underlying (real) shortest path's length.
+
+However, this family requires long preprocessing time as well as a high memory usage.
+On this hardware, none of the preprocessing algorithms worked for Europe.
+The other family of algorithms is low-preprocessing algorithms: A* was the best
+Europe-scale option.
+
+\section{Failures and Learning Process}
+\label{sec:failures}
+
+CH and Arc Flags artifact saving was added because their preprocessing is the
+same between benchmark runs.  Reusing those artifacts avoids rerunning the same
+expensive preprocessing step and makes it much faster to get benchmark results.
+Automated integration tests were also added to cross-check algorithm distances
+against Dijkstra reference results.
+
+Memory pressure was the main practical limitation.  Large benchmark batch sizes
+in PHAST consumed too much RAM, so the implementation was reduced to
+\texttt{kBatchSize = 1}.  Hub Labels with
+\texttt{label\_fraction=0.25} also turned out to be too large for the available
+memory, so the reported Poland run uses a smaller fraction.
+
+For graph partitioning, \href{https://github.com/KaHIP/KaMinPar}{KaMinPar} was
+used as a newer graph-partitioning library than METIS.  It improved over the
+simple inertial partitioning variant, but did not change the broader conclusion
+that Arc Flags remained preprocessing-heavy for the measured speedup.
+
+\clearpage
+\input{result_sources}
+
+\end{document}
